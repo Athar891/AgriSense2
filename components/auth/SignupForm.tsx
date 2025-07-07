@@ -1,48 +1,66 @@
 'use client';
 
 import { useState } from 'react';
+import { useAuth } from './AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sprout, Shield, Store } from 'lucide-react';
-import { useAuth } from './AuthProvider';
+import { Sprout, Shield, Store, UserPlus } from 'lucide-react';
 
-interface LoginFormProps {
-  onSwitchToSignup: () => void;
+interface SignupFormProps {
+  onSwitchToLogin: () => void;
 }
 
-export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
+export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [name, setName] = useState('');
   const [role, setRole] = useState<'farmer' | 'seller' | 'admin'>('farmer');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, loginWithGoogle } = useAuth();
+  const { signup, loginWithGoogle } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    if (!email || !password) {
-      setError('Email and password are required');
+    // Validation
+    if (!email || !password || !confirmPassword || !name) {
+      setError('All fields are required');
       setLoading(false);
       return;
     }
-    const result = await login(email, password, role);
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      setLoading(false);
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      setLoading(false);
+      return;
+    }
+    if (!email.includes('@')) {
+      setError('Please enter a valid email address');
+      setLoading(false);
+      return;
+    }
+    const result = await signup({ email, password, name, role });
     if (!result.success) {
-      setError(result.error || 'Login failed');
+      setError(result.error || 'Signup failed');
     }
     setLoading(false);
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleSignup = async () => {
     setError('');
     setLoading(true);
     const result = await loginWithGoogle(role);
     if (!result.success) {
-      setError(result.error || 'Google login failed');
+      setError(result.error || 'Google signup failed');
     }
     setLoading(false);
   };
@@ -71,9 +89,12 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
 
         <Card className="shadow-lg border-0">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl text-center">Sign In</CardTitle>
+            <CardTitle className="text-2xl text-center flex items-center justify-center gap-2">
+              <UserPlus className="w-6 h-6" />
+              Create Account
+            </CardTitle>
             <CardDescription className="text-center">
-              Enter your credentials to access your account
+              Sign up to start your farming journey
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -85,6 +106,18 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
               )}
               
               <div className="space-y-2">
+                <Label htmlFor="name">Full Name</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="John Doe"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
@@ -95,6 +128,7 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
                   required
                 />
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <Input
@@ -106,6 +140,19 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
                   required
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="Confirm your password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
                 <Select value={role} onValueChange={(value: 'farmer' | 'seller' | 'admin') => setRole(value)}>
@@ -134,23 +181,24 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
                   </SelectContent>
                 </Select>
               </div>
+
               <Button type="submit" className="w-full bg-green-600 hover:bg-green-700" disabled={loading}>
-                {loading ? 'Signing In...' : 'Sign In'}
+                {loading ? 'Creating Account...' : 'Create Account'}
               </Button>
 
-              <Button type="button" onClick={handleGoogleLogin} className="w-full bg-blue-600 hover:bg-blue-700 mt-2" disabled={loading}>
-                {loading ? 'Signing In...' : 'Sign in with Google'}
+              <Button type="button" onClick={handleGoogleSignup} className="w-full bg-blue-600 hover:bg-blue-700 mt-2" disabled={loading}>
+                {loading ? 'Signing Up...' : 'Sign up with Google'}
               </Button>
 
               <div className="text-center">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Don't have an account?{' '}
+                  Already have an account?{' '}
                   <button
                     type="button"
-                    onClick={onSwitchToSignup}
+                    onClick={onSwitchToLogin}
                     className="text-green-600 hover:text-green-700 font-medium"
                   >
-                    Sign Up
+                    Sign In
                   </button>
                 </p>
               </div>
@@ -160,4 +208,4 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
       </div>
     </div>
   );
-}
+} 

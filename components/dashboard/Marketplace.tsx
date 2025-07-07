@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { AddProduct } from './AddProduct';
+import { ProductPage } from './ProductPage';
+import { useToast } from '@/hooks/use-toast';
 import { 
   Search, 
   ShoppingCart, 
@@ -37,16 +39,33 @@ interface Product {
   tags?: string[];
 }
 
-interface MarketplaceProps {
-  userRole: 'farmer' | 'seller' | 'admin';
+interface CartItem {
+  id: number;
+  name: string;
+  price: number;
+  image: string;
+  seller: string;
+  quantity: number;
 }
 
-export function Marketplace({ userRole }: MarketplaceProps) {
+interface MarketplaceProps {
+  userRole: 'farmer' | 'seller' | 'admin';
+  cart: CartItem[];
+  onAddToCart: (product: { id: number; name: string; price: number; image: string; seller: string }) => void;
+  onRemoveFromCart: (productId: number) => void;
+  onUpdateQuantity: (productId: number, quantity: number) => void;
+  getCartTotal: () => number;
+  getCartItemCount: () => number;
+}
+
+export function Marketplace({ userRole, cart, onAddToCart, onRemoveFromCart, onUpdateQuantity, getCartTotal, getCartItemCount }: MarketplaceProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const { toast } = useToast();
   const [filters, setFilters] = useState({
     priceRange: { min: 0, max: 10000 },
     inStock: null as boolean | null,
@@ -190,6 +209,17 @@ export function Marketplace({ userRole }: MarketplaceProps) {
       <AddProduct 
         onBack={() => setShowAddProduct(false)} 
         onProductAdded={handleProductAdded}
+      />
+    );
+  }
+
+  if (selectedProduct) {
+    return (
+      <ProductPage
+        product={selectedProduct}
+        cart={cart}
+        onAddToCart={onAddToCart}
+        onBack={() => setSelectedProduct(null)}
       />
     );
   }
@@ -470,13 +500,13 @@ export function Marketplace({ userRole }: MarketplaceProps) {
       {/* Products Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
         {filteredProducts.map((product) => (
-          <Card key={product.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
+          <Card key={product.id} className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelectedProduct(product)}>
             <CardHeader className="p-0">
-              <div className="aspect-square sm:aspect-video relative overflow-hidden rounded-t-lg">
+              <div className="relative overflow-hidden rounded-t-lg">
                 <img 
                   src={product.image} 
                   alt={product.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-auto object-cover sm:aspect-video"
                 />
                 {!product.inStock && (
                   <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
@@ -487,22 +517,57 @@ export function Marketplace({ userRole }: MarketplaceProps) {
             </CardHeader>
             <CardContent className="p-3 sm:p-4">
               <div className="space-y-2">
-                <h3 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base line-clamp-2">
-                  {product.name}
-                </h3>
-                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 truncate">
-                  by {product.seller}
-                </p>
-                <div className="flex items-center gap-1">
-                  <Star className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 fill-current" />
-                  <span className="text-xs sm:text-sm font-medium">{product.rating}</span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">({product.reviews})</span>
+                <div className="flex justify-between items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base line-clamp-2">
+                      {product.name}
+                    </h3>
+                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 truncate">
+                      by {product.seller}
+                    </p>
+                  </div>
+                  {/* Mobile: Rating and Price on the right */}
+                  <div className="flex flex-col items-end gap-1 sm:hidden">
+                    <div className="flex items-center gap-1">
+                      <Star className="w-3 h-3 text-yellow-500 fill-current" />
+                      <span className="text-xs font-medium">{product.rating}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">({product.reviews})</span>
+                    </div>
+                    <span className="text-lg font-bold text-green-600">₹{product.price}</span>
+                  </div>
                 </div>
+                
+                {/* Desktop: Rating and Price below */}
+                <div className="hidden sm:block">
+                  <div className="flex items-center gap-1">
+                    <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                    <span className="text-sm font-medium">{product.rating}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">({product.reviews})</span>
+                  </div>
+                </div>
+                
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <span className="text-lg sm:text-2xl font-bold text-green-600">₹{product.price}</span>
+                  {/* Desktop: Price on the left */}
+                  <span className="hidden sm:block text-2xl font-bold text-green-600">₹{product.price}</span>
+                  
                   <Button 
                     size="sm"
                     disabled={!product.inStock}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAddToCart({
+                        id: product.id,
+                        name: product.name,
+                        price: product.price,
+                        image: product.image,
+                        seller: product.seller
+                      });
+                      toast({
+                        title: "Added to cart!",
+                        description: `${product.name} has been added to your cart.`,
+                        duration: 2000,
+                      });
+                    }}
                     className="bg-green-600 hover:bg-green-700 w-full sm:w-auto text-xs sm:text-sm h-8 sm:h-9"
                   >
                     <ShoppingCart className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />

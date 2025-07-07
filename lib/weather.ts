@@ -1,4 +1,5 @@
-import { fetchWeatherApi } from 'openmeteo';
+const WEATHER_API_KEY = '0b50cb3664b44ed7819180033250607';
+const WEATHER_API_BASE = 'https://api.weatherapi.com/v1';
 
 export interface WeatherData {
   temperature: number;
@@ -9,6 +10,45 @@ export interface WeatherData {
   icon: string;
   location: string;
   country: string;
+  feelsLike: number;
+  pressure: number;
+  visibility: number;
+  lastUpdated: string;
+}
+
+export interface ForecastData {
+  date: string;
+  maxTemp: number;
+  minTemp: number;
+  avgTemp: number;
+  condition: string;
+  icon: string;
+  humidity: number;
+  windSpeed: number;
+  uvIndex: number;
+  chanceOfRain: number;
+  chanceOfSnow: number;
+}
+
+export interface WeatherAlert {
+  headline: string;
+  severity: string;
+  areas: string;
+  event: string;
+  effective: string;
+  expires: string;
+  description: string;
+  instruction: string;
+}
+
+export interface LocationSearchResult {
+  id: number;
+  name: string;
+  region: string;
+  country: string;
+  lat: number;
+  lon: number;
+  url: string;
 }
 
 export interface WeatherError {
@@ -17,204 +57,135 @@ export interface WeatherError {
 }
 
 class WeatherService {
-  private readonly GEOCODING_URL = 'https://geocoding-api.open-meteo.com/v1/search';
-  private readonly WEATHER_URL = 'https://api.open-meteo.com/v1/forecast';
-
-  async getCurrentWeather(lat: number, lon: number): Promise<WeatherData> {
+  async getCurrentWeather(query: string): Promise<WeatherData> {
     try {
-      const params = {
-        latitude: lat,
-        longitude: lon,
-        current: [
-          'temperature_2m',
-          'relative_humidity_2m',
-          'wind_speed_10m',
-          'weather_code'
-        ],
-        hourly: ['uv_index'],
-        timezone: 'auto'
-      };
-
-      const responses = await fetchWeatherApi(this.WEATHER_URL, params);
-      const response = responses[0];
-
-      const current = response.current()!;
-      const hourly = response.hourly()!;
-
-      // Get current values
-      const temperature = Math.round(current.variables(0)!.value());
-      const humidity = Math.round(current.variables(1)!.value());
-      const windSpeed = Math.round(current.variables(2)!.value() * 3.6); // Convert m/s to km/h
-      const weatherCode = current.variables(3)!.value();
-
-      // Get UV index from hourly data (current hour)
-      const uvValues = hourly.variables(0)!.valuesArray()!;
-      const uvIndex = Math.round(uvValues[0] || 0);
-
-      // Get location name from coordinates
-      const locationData = await this.getLocationName(lat, lon);
-
-      return {
-        temperature,
-        humidity,
-        windSpeed,
-        uvIndex,
-        description: this.getWeatherDescription(weatherCode),
-        icon: this.getWeatherIcon(weatherCode),
-        location: locationData.name,
-        country: locationData.country
-      };
-    } catch (error) {
-      console.error('Error fetching weather data:', error);
-      throw new Error('Failed to fetch weather data');
-    }
-  }
-
-  async getWeatherByCity(city: string): Promise<WeatherData> {
-    try {
-      // First, get coordinates for the city
-      const locationResponse = await fetch(
-        `${this.GEOCODING_URL}?name=${encodeURIComponent(city)}&count=1&language=en&format=json`
-      );
-
-      if (!locationResponse.ok) {
-        throw new Error('Failed to find location');
-      }
-
-      const locationData = await locationResponse.json();
-      
-      if (!locationData.results || locationData.results.length === 0) {
-        throw new Error('Location not found');
-      }
-
-      const location = locationData.results[0];
-      const lat = location.latitude;
-      const lon = location.longitude;
-
-      // Now get weather data for these coordinates
-      const params = {
-        latitude: lat,
-        longitude: lon,
-        current: [
-          'temperature_2m',
-          'relative_humidity_2m',
-          'wind_speed_10m',
-          'weather_code'
-        ],
-        hourly: ['uv_index'],
-        timezone: 'auto'
-      };
-
-      const responses = await fetchWeatherApi(this.WEATHER_URL, params);
-      const response = responses[0];
-
-      const current = response.current()!;
-      const hourly = response.hourly()!;
-
-      // Get current values
-      const temperature = Math.round(current.variables(0)!.value());
-      const humidity = Math.round(current.variables(1)!.value());
-      const windSpeed = Math.round(current.variables(2)!.value() * 3.6); // Convert m/s to km/h
-      const weatherCode = current.variables(3)!.value();
-
-      // Get UV index from hourly data (current hour)
-      const uvValues = hourly.variables(0)!.valuesArray()!;
-      const uvIndex = Math.round(uvValues[0] || 0);
-
-      return {
-        temperature,
-        humidity,
-        windSpeed,
-        uvIndex,
-        description: this.getWeatherDescription(weatherCode),
-        icon: this.getWeatherIcon(weatherCode),
-        location: location.name,
-        country: location.country_code?.toUpperCase() || location.country || 'Unknown'
-      };
-    } catch (error) {
-      console.error('Error fetching weather data:', error);
-      throw new Error('Failed to fetch weather data');
-    }
-  }
-
-  private async getLocationName(lat: number, lon: number): Promise<{ name: string; country: string }> {
-    try {
-      // Use reverse geocoding to get location name
       const response = await fetch(
-        `${this.GEOCODING_URL}?latitude=${lat}&longitude=${lon}&count=1&language=en&format=json`
+        `${WEATHER_API_BASE}/current.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(query)}&aqi=yes`
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.results && data.results.length > 0) {
-          const location = data.results[0];
-          return {
-            name: location.name,
-            country: location.country_code?.toUpperCase() || location.country || 'Unknown'
-          };
-        }
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to fetch weather data');
       }
+
+      const data = await response.json();
+      const current = data.current;
+      const location = data.location;
+
+      return {
+        temperature: Math.round(current.temp_c),
+        humidity: current.humidity,
+        windSpeed: Math.round(current.wind_kph),
+        uvIndex: current.uv,
+        description: current.condition.text,
+        icon: current.condition.icon,
+        location: location.name,
+        country: location.country,
+        feelsLike: Math.round(current.feelslike_c),
+        pressure: current.pressure_mb,
+        visibility: current.vis_km,
+        lastUpdated: current.last_updated
+      };
     } catch (error) {
-      console.warn('Failed to get location name:', error);
+      console.error('Error fetching current weather:', error);
+      throw new Error('Failed to fetch weather data');
     }
-
-    // Fallback
-    return { name: 'Unknown Location', country: 'Unknown' };
   }
 
-  private getWeatherDescription(weatherCode: number): string {
-    const weatherCodes: { [key: number]: string } = {
-      0: 'clear sky',
-      1: 'mainly clear',
-      2: 'partly cloudy',
-      3: 'overcast',
-      45: 'fog',
-      48: 'depositing rime fog',
-      51: 'light drizzle',
-      53: 'moderate drizzle',
-      55: 'dense drizzle',
-      56: 'light freezing drizzle',
-      57: 'dense freezing drizzle',
-      61: 'slight rain',
-      63: 'moderate rain',
-      65: 'heavy rain',
-      66: 'light freezing rain',
-      67: 'heavy freezing rain',
-      71: 'slight snow fall',
-      73: 'moderate snow fall',
-      75: 'heavy snow fall',
-      77: 'snow grains',
-      80: 'slight rain showers',
-      81: 'moderate rain showers',
-      82: 'violent rain showers',
-      85: 'slight snow showers',
-      86: 'heavy snow showers',
-      95: 'thunderstorm',
-      96: 'thunderstorm with slight hail',
-      99: 'thunderstorm with heavy hail'
-    };
+  async getWeatherForecast(query: string, days: number = 7): Promise<ForecastData[]> {
+    try {
+      const response = await fetch(
+        `${WEATHER_API_BASE}/forecast.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(query)}&days=${days}&aqi=yes&alerts=yes`
+      );
 
-    return weatherCodes[weatherCode] || 'unknown weather';
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to fetch forecast data');
+      }
+
+      const data = await response.json();
+      const forecast = data.forecast.forecastday;
+
+      return forecast.map((day: any) => ({
+        date: day.date,
+        maxTemp: Math.round(day.day.maxtemp_c),
+        minTemp: Math.round(day.day.mintemp_c),
+        avgTemp: Math.round(day.day.avgtemp_c),
+        condition: day.day.condition.text,
+        icon: day.day.condition.icon,
+        humidity: day.day.avghumidity,
+        windSpeed: Math.round(day.day.maxwind_kph),
+        uvIndex: day.day.uv,
+        chanceOfRain: day.day.daily_chance_of_rain,
+        chanceOfSnow: day.day.daily_chance_of_snow
+      }));
+    } catch (error) {
+      console.error('Error fetching weather forecast:', error);
+      throw new Error('Failed to fetch forecast data');
+    }
   }
 
-  private getWeatherIcon(weatherCode: number): string {
-    // Map weather codes to OpenWeatherMap-style icon codes for consistency
-    if (weatherCode === 0) return '01d'; // clear sky
-    if (weatherCode === 1) return '02d'; // mainly clear
-    if (weatherCode === 2) return '03d'; // partly cloudy
-    if (weatherCode === 3) return '04d'; // overcast
-    if (weatherCode === 45 || weatherCode === 48) return '50d'; // fog
-    if ([51, 53, 55, 56, 57].includes(weatherCode)) return '09d'; // drizzle
-    if ([61, 63, 65, 66, 67].includes(weatherCode)) return '10d'; // rain
-    if ([71, 73, 75, 77].includes(weatherCode)) return '13d'; // snow
-    if ([80, 81, 82].includes(weatherCode)) return '09d'; // rain showers
-    if ([85, 86].includes(weatherCode)) return '13d'; // snow showers
-    if ([95, 96, 99].includes(weatherCode)) return '11d'; // thunderstorm
-    
-    return '01d'; // default to clear sky
+  async searchLocations(query: string): Promise<LocationSearchResult[]> {
+    try {
+      const response = await fetch(
+        `${WEATHER_API_BASE}/search.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(query)}`
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to search locations');
+      }
+
+      const data = await response.json();
+      return data.map((location: any, index: number) => ({
+        id: index,
+        name: location.name,
+        region: location.region,
+        country: location.country,
+        lat: location.lat,
+        lon: location.lon,
+        url: location.url
+      }));
+    } catch (error) {
+      console.error('Error searching locations:', error);
+      throw new Error('Failed to search locations');
+    }
   }
 
-  getCurrentPosition(): Promise<GeolocationPosition> {
+  async getWeatherAlerts(query: string): Promise<WeatherAlert[]> {
+    try {
+      const response = await fetch(
+        `${WEATHER_API_BASE}/forecast.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(query)}&days=1&alerts=yes`
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to fetch weather alerts');
+      }
+
+      const data = await response.json();
+      
+      if (!data.alerts || !data.alerts.alert) {
+        return [];
+      }
+
+      return data.alerts.alert.map((alert: any) => ({
+        headline: alert.headline,
+        severity: alert.severity,
+        areas: alert.areas,
+        event: alert.event,
+        effective: alert.effective,
+        expires: alert.expires,
+        description: alert.desc,
+        instruction: alert.instruction
+      }));
+    } catch (error) {
+      console.error('Error fetching weather alerts:', error);
+      return [];
+    }
+  }
+
+  async getCurrentPosition(): Promise<GeolocationPosition> {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
         reject(new Error('Geolocation is not supported by this browser'));
@@ -222,23 +193,8 @@ class WeatherService {
       }
 
       navigator.geolocation.getCurrentPosition(
-        resolve,
-        (error) => {
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              reject(new Error('Location access denied by user'));
-              break;
-            case error.POSITION_UNAVAILABLE:
-              reject(new Error('Location information unavailable'));
-              break;
-            case error.TIMEOUT:
-              reject(new Error('Location request timed out'));
-              break;
-            default:
-              reject(new Error('An unknown error occurred'));
-              break;
-          }
-        },
+        (position) => resolve(position),
+        (error) => reject(error),
         {
           enableHighAccuracy: true,
           timeout: 10000,
@@ -248,34 +204,56 @@ class WeatherService {
     });
   }
 
-  // Get popular agricultural cities for recommendations
   getRecommendedLocations(): Array<{ name: string; country: string; type: string; description: string }> {
     return [
-      { name: 'Pune', country: 'IN', type: 'Agricultural Hub', description: 'Major agricultural research center' },
-      { name: 'Nashik', country: 'IN', type: 'Wine Region', description: 'Famous for grapes and wine production' },
-      { name: 'Aurangabad', country: 'IN', type: 'Cotton Belt', description: 'Major cotton growing region' },
-      { name: 'Solapur', country: 'IN', type: 'Sugarcane Region', description: 'Leading sugarcane producer' },
-      { name: 'Kolhapur', country: 'IN', type: 'Dairy Farming', description: 'Known for dairy and livestock' },
-      { name: 'Ahmednagar', country: 'IN', type: 'Onion Hub', description: 'Major onion trading center' },
-      { name: 'Sangli', country: 'IN', type: 'Turmeric Center', description: 'Leading turmeric market' },
-      { name: 'Satara', country: 'IN', type: 'Strawberry Region', description: 'Famous for strawberry cultivation' },
-      { name: 'Jalgaon', country: 'IN', type: 'Banana Belt', description: 'Major banana growing region' },
-      { name: 'Latur', country: 'IN', type: 'Pulses Hub', description: 'Important for pulse crops' }
+      { name: 'Mumbai', country: 'India', type: 'Metropolitan', description: 'Financial capital of India' },
+      { name: 'Delhi', country: 'India', type: 'Capital', description: 'National capital territory' },
+      { name: 'Bangalore', country: 'India', type: 'Tech Hub', description: 'Silicon Valley of India' },
+      { name: 'Chennai', country: 'India', type: 'Coastal', description: 'Gateway to South India' },
+      { name: 'Kolkata', country: 'India', type: 'Cultural', description: 'City of Joy' },
+      { name: 'Hyderabad', country: 'India', type: 'IT Hub', description: 'Pearl City' },
+      { name: 'Pune', country: 'India', type: 'Educational', description: 'Oxford of the East' },
+      { name: 'Ahmedabad', country: 'India', type: 'Industrial', description: 'Manchester of India' }
     ];
   }
 
-  // Fallback weather data for demo purposes
   getFallbackWeather(): WeatherData {
     return {
-      temperature: 28,
+      temperature: 25,
       humidity: 65,
       windSpeed: 12,
-      uvIndex: 6,
-      description: 'partly cloudy',
-      icon: '02d',
-      location: 'Pune',
-      country: 'IN'
+      uvIndex: 5,
+      description: 'Partly cloudy',
+      icon: '//cdn.weatherapi.com/weather/64x64/day/116.png',
+      location: 'Mumbai',
+      country: 'India',
+      feelsLike: 27,
+      pressure: 1013,
+      visibility: 10,
+      lastUpdated: new Date().toISOString()
     };
+  }
+
+  getFallbackForecast(): ForecastData[] {
+    const today = new Date();
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      
+      return {
+        date: date.toISOString().split('T')[0],
+        maxTemp: 28 + Math.floor(Math.random() * 5),
+        minTemp: 20 + Math.floor(Math.random() * 5),
+        avgTemp: 24 + Math.floor(Math.random() * 3),
+        condition: 'Partly cloudy',
+        icon: '//cdn.weatherapi.com/weather/64x64/day/116.png',
+        humidity: 60 + Math.floor(Math.random() * 20),
+        windSpeed: 10 + Math.floor(Math.random() * 10),
+        uvIndex: 3 + Math.floor(Math.random() * 7),
+        chanceOfRain: Math.floor(Math.random() * 30),
+        chanceOfSnow: 0
+      };
+    });
   }
 }
 

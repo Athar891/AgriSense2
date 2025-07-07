@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,23 +17,35 @@ import {
   Save,
   Camera
 } from 'lucide-react';
+import { useAuth } from '@/components/auth/AuthProvider';
+import { db, auth } from '@/lib/firebase';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { deleteUser } from 'firebase/auth';
 
-interface ProfileProps {
-  userRole: 'farmer' | 'seller' | 'admin';
-}
-
-export function Profile({ userRole }: ProfileProps) {
+export function Profile() {
+  const { user, logout } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
-  const [profileData, setProfileData] = useState({
-    name: 'Rajesh Kumar',
-    email: 'rajesh.kumar@example.com',
-    phone: '+91 9876543210',
-    location: 'Pune, Maharashtra',
-    farmSize: '25 acres',
-    experience: '15 years',
-    specialization: 'Organic Farming',
-    joinDate: '2020-03-15'
-  });
+  const [profileData, setProfileData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+    getDoc(doc(db, 'users', user.id)).then((docSnap) => {
+      if (docSnap.exists()) {
+        setProfileData(docSnap.data());
+      } else {
+        setProfileData({
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        });
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [user]);
 
   const [preferences, setPreferences] = useState({
     emailNotifications: true,
@@ -41,10 +53,15 @@ export function Profile({ userRole }: ProfileProps) {
     darkMode: false
   });
 
-  const handleSave = () => {
-    // Save profile data to backend
-    console.log('Saving profile:', profileData);
-    setIsEditing(false);
+  const handleSave = async () => {
+    if (!user) return;
+    setError('');
+    try {
+      await updateDoc(doc(db, 'users', user.id), profileData);
+      setIsEditing(false);
+    } catch (e: any) {
+      setError(e.message || 'Failed to update profile');
+    }
   };
 
   const togglePreference = (key: keyof typeof preferences) => {
@@ -61,6 +78,25 @@ export function Profile({ userRole }: ProfileProps) {
     { label: 'Community Posts', value: '8', icon: User },
   ];
 
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+    if (!window.confirm('Are you sure you want to delete your account? This cannot be undone.')) return;
+    setDeleting(true);
+    setError('');
+    try {
+      await deleteDoc(doc(db, 'users', user.id));
+      if (auth.currentUser) {
+        await deleteUser(auth.currentUser);
+      }
+      await logout();
+    } catch (e: any) {
+      setError(e.message || 'Failed to delete account');
+    }
+    setDeleting(false);
+  };
+
+  if (loading) return <div>Loading profile...</div>;
+  if (!profileData) return <div>No profile data found.</div>;
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -82,8 +118,12 @@ export function Profile({ userRole }: ProfileProps) {
               Edit Profile
             </Button>
           )}
+          <Button onClick={handleDeleteAccount} className="bg-red-600 hover:bg-red-700 text-white" disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete Account'}
+          </Button>
         </div>
       </div>
+      {error && <div className="bg-red-100 text-red-700 p-2 rounded">{error}</div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
@@ -102,7 +142,7 @@ export function Profile({ userRole }: ProfileProps) {
                 <div>
                   <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{profileData.name}</h3>
                   <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                    {userRole.charAt(0).toUpperCase() + userRole.slice(1)}
+                    {profileData.role ? profileData.role.charAt(0).toUpperCase() + profileData.role.slice(1) : ''}
                   </Badge>
                 </div>
               </div>
@@ -112,7 +152,7 @@ export function Profile({ userRole }: ProfileProps) {
                   <Label htmlFor="name">Full Name</Label>
                   <Input
                     id="name"
-                    value={profileData.name}
+                    value={profileData.name || ''}
                     onChange={(e) => setProfileData({...profileData, name: e.target.value})}
                     disabled={!isEditing}
                   />
@@ -122,8 +162,17 @@ export function Profile({ userRole }: ProfileProps) {
                   <Input
                     id="email"
                     type="email"
-                    value={profileData.email}
+                    value={profileData.email || ''}
                     onChange={(e) => setProfileData({...profileData, email: e.target.value})}
+                    disabled={!isEditing}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="role">Role</Label>
+                  <Input
+                    id="role"
+                    value={profileData.role || ''}
+                    onChange={(e) => setProfileData({...profileData, role: e.target.value})}
                     disabled={!isEditing}
                   />
                 </div>
@@ -131,7 +180,7 @@ export function Profile({ userRole }: ProfileProps) {
                   <Label htmlFor="phone">Phone</Label>
                   <Input
                     id="phone"
-                    value={profileData.phone}
+                    value={profileData.phone || ''}
                     onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
                     disabled={!isEditing}
                   />
@@ -140,7 +189,7 @@ export function Profile({ userRole }: ProfileProps) {
                   <Label htmlFor="location">Location</Label>
                   <Input
                     id="location"
-                    value={profileData.location}
+                    value={profileData.location || ''}
                     onChange={(e) => setProfileData({...profileData, location: e.target.value})}
                     disabled={!isEditing}
                   />
@@ -149,7 +198,7 @@ export function Profile({ userRole }: ProfileProps) {
                   <Label htmlFor="farmSize">Farm Size</Label>
                   <Input
                     id="farmSize"
-                    value={profileData.farmSize}
+                    value={profileData.farmSize || ''}
                     onChange={(e) => setProfileData({...profileData, farmSize: e.target.value})}
                     disabled={!isEditing}
                   />
@@ -158,8 +207,17 @@ export function Profile({ userRole }: ProfileProps) {
                   <Label htmlFor="experience">Experience</Label>
                   <Input
                     id="experience"
-                    value={profileData.experience}
+                    value={profileData.experience || ''}
                     onChange={(e) => setProfileData({...profileData, experience: e.target.value})}
+                    disabled={!isEditing}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="specialization">Specialization</Label>
+                  <Input
+                    id="specialization"
+                    value={profileData.specialization || ''}
+                    onChange={(e) => setProfileData({...profileData, specialization: e.target.value})}
                     disabled={!isEditing}
                   />
                 </div>

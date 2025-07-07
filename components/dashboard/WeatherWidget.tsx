@@ -1,357 +1,374 @@
 'use client';
 
-import { useState } from 'react';
-import { useWeather } from '@/hooks/useWeather';
+import { useState, useEffect, useRef } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { 
+  Cloud, 
+  Sun, 
+  CloudRain, 
+  CloudSnow, 
+  Wind, 
   Thermometer, 
   Droplets, 
-  Wind, 
-  Sun, 
-  Cloud,
-  CloudRain,
-  CloudSnow,
-  Zap,
-  RefreshCw,
+  Eye,
   MapPin,
   Search,
+  X,
+  AlertTriangle,
+  Calendar,
+  Clock,
+  Loader2,
+  RefreshCw,
   Navigation,
-  Star,
-  X
+  Gauge
 } from 'lucide-react';
+import { useWeather, useWeatherSearch } from '@/hooks/useWeather';
+import { WeatherAlert } from '@/lib/weather';
 
 interface WeatherWidgetProps {
-  className?: string;
-  showLocation?: boolean;
   compact?: boolean;
+  showLocation?: boolean;
+  className?: string;
 }
 
-export function WeatherWidget({ className = '', showLocation = true, compact = false }: WeatherWidgetProps) {
-  const [customLocation, setCustomLocation] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState('Pune');
-  const [showLocationSearch, setShowLocationSearch] = useState(false);
-  const { weather, loading, error, refetch } = useWeather(selectedLocation);
+export function WeatherWidget({ compact = false, showLocation = true, className = '' }: WeatherWidgetProps) {
+  const [currentLocation, setCurrentLocation] = useState<string>('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAlerts, setShowAlerts] = useState(false);
+  const [showForecast, setShowForecast] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
 
-  // Recommended locations for farmers
-  const recommendedLocations = [
-    { name: 'Pune', country: 'IN', type: 'Agricultural Hub' },
-    { name: 'Nashik', country: 'IN', type: 'Wine Region' },
-    { name: 'Aurangabad', country: 'IN', type: 'Cotton Belt' },
-    { name: 'Solapur', country: 'IN', type: 'Sugarcane Region' },
-    { name: 'Kolhapur', country: 'IN', type: 'Dairy Farming' },
-    { name: 'Ahmednagar', country: 'IN', type: 'Onion Hub' },
-    { name: 'Sangli', country: 'IN', type: 'Turmeric Center' },
-    { name: 'Satara', country: 'IN', type: 'Strawberry Region' }
-  ];
+  const { weather, forecast, alerts, loading, error, refetch } = useWeather(currentLocation);
+  const { searchResults, loading: searchLoading, search } = useWeatherSearch();
 
-  const getWeatherIcon = (iconCode: string, description: string) => {
-    const code = iconCode?.substring(0, 2);
-    
-    switch (code) {
-      case '01': return <Sun className="w-5 h-5 text-yellow-500" />;
-      case '02': 
-      case '03': 
-      case '04': return <Cloud className="w-5 h-5 text-gray-500" />;
-      case '09': 
-      case '10': return <CloudRain className="w-5 h-5 text-blue-500" />;
-      case '11': return <Zap className="w-5 h-5 text-purple-500" />;
-      case '13': return <CloudSnow className="w-5 h-5 text-blue-300" />;
-      default: return <Sun className="w-5 h-5 text-yellow-500" />;
+  // Debounced search
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchQuery.trim()) {
+        search(searchQuery);
+      }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, search]);
+
+  // Close search dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSearch(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleLocationSelect = (location: string) => {
+    setCurrentLocation(location);
+    setShowSearch(false);
+    setSearchQuery('');
+  };
+
+  const getWeatherIcon = (condition: string) => {
+    const conditionLower = condition.toLowerCase();
+    if (conditionLower.includes('sunny') || conditionLower.includes('clear')) return <Sun className="w-6 h-6" />;
+    if (conditionLower.includes('cloudy') || conditionLower.includes('overcast')) return <Cloud className="w-6 h-6" />;
+    if (conditionLower.includes('rain') || conditionLower.includes('drizzle')) return <CloudRain className="w-6 h-6" />;
+    if (conditionLower.includes('snow')) return <CloudSnow className="w-6 h-6" />;
+    return <Cloud className="w-6 h-6" />;
+  };
+
+  const getAlertSeverityColor = (severity: string) => {
+    switch (severity.toLowerCase()) {
+      case 'extreme': return 'bg-red-500';
+      case 'severe': return 'bg-orange-500';
+      case 'moderate': return 'bg-yellow-500';
+      case 'minor': return 'bg-blue-500';
+      default: return 'bg-gray-500';
     }
   };
 
-  const getUVLevel = (uvIndex: number) => {
-    if (uvIndex <= 2) return { level: 'Low', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' };
-    if (uvIndex <= 5) return { level: 'Moderate', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' };
-    if (uvIndex <= 7) return { level: 'High', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' };
-    if (uvIndex <= 10) return { level: 'Very High', color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' };
-    return { level: 'Extreme', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' };
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
   };
 
-  const handleLocationSearch = () => {
-    if (customLocation.trim()) {
-      setSelectedLocation(customLocation.trim());
-      setCustomLocation('');
-      setShowLocationSearch(false);
-    }
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
   };
-
-  const handleRecommendedLocation = (location: string) => {
-    setSelectedLocation(location);
-    setShowLocationSearch(false);
-  };
-
-  const handleCurrentLocation = async () => {
-    try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 300000
-        });
-      });
-      
-      // For demo purposes, we'll use coordinates to set a location name
-      // In a real app, you'd reverse geocode these coordinates
-      setSelectedLocation(`${position.coords.latitude.toFixed(2)},${position.coords.longitude.toFixed(2)}`);
-      setShowLocationSearch(false);
-    } catch (error) {
-      console.error('Failed to get current location:', error);
-      alert('Unable to access your location. Please enter manually or choose from recommendations.');
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className={`flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-lg ${className}`}>
-        <RefreshCw className="w-4 h-4 text-gray-600 dark:text-gray-300 animate-spin" />
-        <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">Loading weather...</span>
-      </div>
-    );
-  }
-
-  if (error && !weather) {
-    return (
-      <div className={`flex items-center gap-2 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg ${className}`}>
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={refetch}
-          className="text-red-700 dark:text-red-300 hover:text-red-800 dark:hover:text-red-200 font-semibold"
-        >
-          <RefreshCw className="w-4 h-4 mr-1" />
-          Retry
-        </Button>
-      </div>
-    );
-  }
-
-  if (!weather) return null;
 
   if (compact) {
     return (
-      <div className={`flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-lg ${className}`}>
-        {getWeatherIcon(weather.icon, weather.description)}
-        <span className="text-sm font-bold text-gray-900 dark:text-white">{weather.temperature}°C</span>
-        {showLocation && (
+      <div className={`flex items-center gap-2 ${className}`}>
+        {loading ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : weather ? (
           <>
-            <div className="w-1 h-1 bg-gray-500 dark:bg-gray-400 rounded-full" />
-            <button 
-              onClick={() => setShowLocationSearch(!showLocationSearch)}
-              className="text-xs font-semibold text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center gap-1 transition-colors"
-            >
-              <MapPin className="w-3 h-3" />
-              {weather.location}
-            </button>
-          </>
-        )}
-        
-        {showLocationSearch && (
-          <div className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-4 z-50 min-w-80">
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter city name..."
-                  value={customLocation}
-                  onChange={(e) => setCustomLocation(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleLocationSearch()}
-                  className="flex-1"
-                />
-                <Button onClick={handleLocationSearch} size="sm">
-                  <Search className="w-4 h-4" />
-                </Button>
-              </div>
-              
-              <Button 
-                onClick={handleCurrentLocation}
-                variant="outline" 
-                size="sm" 
-                className="w-full"
-              >
-                <Navigation className="w-4 h-4 mr-2" />
-                Use Current Location
-              </Button>
-              
-              <div className="border-t dark:border-gray-700 pt-2">
-                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Recommended for Agriculture:</p>
-                <div className="grid grid-cols-2 gap-1">
-                  {recommendedLocations.slice(0, 4).map((loc) => (
-                    <Button
-                      key={loc.name}
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRecommendedLocation(loc.name)}
-                      className="text-xs justify-start h-auto p-2"
-                    >
-                      <Star className="w-3 h-3 mr-1 text-yellow-500" />
-                      {loc.name}
-                    </Button>
-                  ))}
-                </div>
-              </div>
+            {getWeatherIcon(weather.description)}
+            <div className="text-sm">
+              <div className="font-semibold">{weather.temperature}°C</div>
+              {showLocation && (
+                <div className="text-xs text-gray-500">{weather.location}</div>
+              )}
             </div>
-          </div>
+            {alerts.length > 0 && (
+              <Badge variant="destructive" className="text-xs">
+                {alerts.length} Alert{alerts.length > 1 ? 's' : ''}
+              </Badge>
+            )}
+          </>
+        ) : (
+          <div className="text-sm text-gray-500">Weather unavailable</div>
         )}
       </div>
     );
   }
 
-  const uvInfo = getUVLevel(weather.uvIndex);
-
   return (
-    <div className={`space-y-4 ${className}`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {getWeatherIcon(weather.icon, weather.description)}
-          <div>
-            <div className="text-3xl font-black text-gray-900 dark:text-white">{weather.temperature}°C</div>
-            <div className="text-sm font-semibold text-gray-700 dark:text-gray-300 capitalize">{weather.description}</div>
-          </div>
-        </div>
-        
-        {showLocation && (
-          <div className="text-right relative">
-            <div className="flex items-center gap-1 text-sm font-semibold text-gray-700 dark:text-gray-300">
-              <button 
-                onClick={() => setShowLocationSearch(!showLocationSearch)}
-                className="flex items-center gap-1 hover:text-gray-900 dark:hover:text-white transition-colors"
+    <div className={`relative ${className}`}>
+      <Card className="w-full">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Thermometer className="w-5 h-5" />
+              Weather
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {alerts.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAlerts(!showAlerts)}
+                  className="relative"
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  <Badge 
+                    variant="destructive" 
+                    className="absolute -top-2 -right-2 w-5 h-5 text-xs p-0"
+                  >
+                    {alerts.length}
+                  </Badge>
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowForecast(!showForecast)}
               >
-                <MapPin className="w-3 h-3" />
-                {weather.location}, {weather.country}
-              </button>
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <Button 
-                variant="ghost" 
-                size="sm" 
+                <Calendar className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSearch(!showSearch)}
+              >
+                <Search className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={refetch}
-                className="text-xs font-semibold text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 p-0 h-auto"
+                disabled={loading}
               >
-                <RefreshCw className="w-3 h-3 mr-1" />
-                Update
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setShowLocationSearch(!showLocationSearch)}
-                className="text-xs font-semibold text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 p-0 h-auto"
-              >
-                <Search className="w-3 h-3 mr-1" />
-                Change
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
               </Button>
             </div>
-            
-            {showLocationSearch && (
-              <Card className="absolute top-full right-0 mt-2 w-96 z-50 shadow-lg border-gray-200 dark:border-gray-700">
-                <CardContent className="p-4">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-bold text-gray-900 dark:text-white">Change Location</h3>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setShowLocationSearch(false)}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Enter city name..."
-                          value={customLocation}
-                          onChange={(e) => setCustomLocation(e.target.value)}
-                          onKeyPress={(e) => e.key === 'Enter' && handleLocationSearch()}
-                          className="flex-1"
-                        />
-                        <Button onClick={handleLocationSearch} size="sm">
-                          <Search className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      
-                      <Button 
-                        onClick={handleCurrentLocation}
-                        variant="outline" 
-                        size="sm" 
-                        className="w-full"
-                      >
-                        <Navigation className="w-4 h-4 mr-2" />
-                        Use Current Location
-                      </Button>
-                      
-                      <div className="border-t dark:border-gray-700 pt-3">
-                        <p className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-2">Recommended Agricultural Regions:</p>
-                        <div className="space-y-1 max-h-48 overflow-y-auto">
-                          {recommendedLocations.map((loc) => (
-                            <Button
-                              key={loc.name}
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRecommendedLocation(loc.name)}
-                              className="w-full justify-between h-auto p-2"
-                            >
-                              <div className="flex items-center gap-2">
-                                <Star className="w-3 h-3 text-yellow-500" />
-                                <span className="text-sm font-semibold">{loc.name}</span>
-                              </div>
-                              <Badge variant="outline" className="text-xs font-medium">
-                                {loc.type}
-                              </Badge>
-                            </Button>
-                          ))}
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          {/* Location Search */}
+          {showSearch && (
+            <div ref={searchRef} className="relative">
+              <Input
+                placeholder="Search location..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pr-8"
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSearch(false)}
+                className="absolute right-1 top-1 h-6 w-6 p-0"
+              >
+                <X className="w-3 h-3" />
+              </Button>
+              
+              {searchLoading && (
+                <div className="absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border rounded-md p-2 z-10">
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Searching...
+                  </div>
+                </div>
+              )}
+              
+              {searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border rounded-md max-h-48 overflow-y-auto z-10">
+                  {searchResults.map((result) => (
+                    <button
+                      key={result.id}
+                      onClick={() => handleLocationSelect(result.name)}
+                      className="w-full text-left p-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                    >
+                      <MapPin className="w-4 h-4 text-gray-400" />
+                      <div>
+                        <div className="font-medium">{result.name}</div>
+                        <div className="text-sm text-gray-500">
+                          {result.region && `${result.region}, `}{result.country}
                         </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Current Weather */}
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+          ) : error ? (
+            <div className="text-center py-4 text-red-500">
+              {error}
+            </div>
+          ) : weather ? (
+            <div className="space-y-4">
+              {/* Main Weather Info */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="text-4xl">
+                    {getWeatherIcon(weather.description)}
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold">{weather.temperature}°C</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      Feels like {weather.feelsLike}°C
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-semibold">{weather.location}</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    {weather.country}
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center">
+                <div className="text-lg font-medium capitalize">{weather.description}</div>
+                <div className="text-sm text-gray-500">
+                  Last updated: {formatTime(weather.lastUpdated)}
+                </div>
+              </div>
+
+              {/* Weather Details */}
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="flex items-center gap-2">
+                  <Droplets className="w-4 h-4 text-blue-500" />
+                  <span className="text-sm">Humidity: {weather.humidity}%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Wind className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm">Wind: {weather.windSpeed} km/h</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm">Visibility: {weather.visibility} km</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Gauge className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm">Pressure: {weather.pressure} mb</span>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Weather Alerts */}
+          {showAlerts && alerts.length > 0 && (
+            <div className="space-y-2 pt-4 border-t">
+              <h4 className="font-semibold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-500" />
+                Weather Alerts ({alerts.length})
+              </h4>
+              {alerts.map((alert, index) => (
+                <div key={index} className="p-3 border rounded-lg bg-red-50 dark:bg-red-900/20">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge className={`${getAlertSeverityColor(alert.severity)} text-white`}>
+                          {alert.severity}
+                        </Badge>
+                        <span className="font-medium text-sm">{alert.headline}</span>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        {alert.description}
+                      </p>
+                      <div className="text-xs text-gray-500 space-y-1">
+                        <div>Areas: {alert.areas}</div>
+                        <div>Effective: {formatTime(alert.effective)}</div>
+                        <div>Expires: {formatTime(alert.expires)}</div>
                       </div>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-          <Thermometer className="w-5 h-5 text-red-500" />
-          <div>
-            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Temperature</p>
-            <p className="font-black text-gray-900 dark:text-white">{weather.temperature}°C</p>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-          <Droplets className="w-5 h-5 text-blue-500" />
-          <div>
-            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Humidity</p>
-            <p className="font-black text-gray-900 dark:text-white">{weather.humidity}%</p>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-          <Wind className="w-5 h-5 text-gray-500" />
-          <div>
-            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Wind Speed</p>
-            <p className="font-black text-gray-900 dark:text-white">{weather.windSpeed} km/h</p>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-          <Sun className="w-5 h-5 text-yellow-500" />
-          <div>
-            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">UV Index</p>
-            <div className="flex items-center gap-2">
-              <p className="font-black text-gray-900 dark:text-white">{weather.uvIndex}</p>
-              <Badge className={`text-xs font-bold ${uvInfo.color}`}>
-                {uvInfo.level}
-              </Badge>
+                </div>
+              ))}
             </div>
-          </div>
-        </div>
-      </div>
+          )}
+
+          {/* Weather Forecast */}
+          {showForecast && forecast.length > 0 && (
+            <div className="space-y-2 pt-4 border-t">
+              <h4 className="font-semibold flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                7-Day Forecast
+              </h4>
+              <div className="space-y-2">
+                {forecast.map((day, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 text-center text-sm font-medium">
+                        {formatDate(day.date)}
+                      </div>
+                      <div className="w-8">
+                        {getWeatherIcon(day.condition)}
+                      </div>
+                      <div className="text-sm capitalize">{day.condition}</div>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-1">
+                        <span className="text-red-500 font-medium">{day.maxTemp}°</span>
+                        <span className="text-blue-500">{day.minTemp}°</span>
+                      </div>
+                      <div className="text-gray-500">{day.chanceOfRain}%</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
