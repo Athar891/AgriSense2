@@ -15,37 +15,62 @@ import {
   Settings,
   Edit,
   Save,
-  Camera
+  Camera,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { db, auth } from '@/lib/firebase';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { deleteUser } from 'firebase/auth';
+import { useTheme } from 'next-themes';
+import { useToast } from '@/hooks/use-toast';
+import type { User } from '@/components/auth/AuthProvider';
+
+function getUserDocRef(user: User) {
+  if (!user) throw new Error('No user');
+  if (user.role === 'farmer') return doc(db, 'farmers', user.id);
+  if (user.role === 'seller') return doc(db, 'sellers', user.id);
+  throw new Error('Unknown role');
+}
 
 export function Profile() {
   const { user, logout } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
   const [profileData, setProfileData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     setLoading(true);
-    getDoc(doc(db, 'users', user.id)).then((docSnap) => {
+    getDoc(getUserDocRef(user)).then((docSnap) => {
       if (docSnap.exists()) {
         setProfileData(docSnap.data());
+        setIsEditing(false);
+        if (docSnap.data().preferences?.darkMode !== undefined) {
+          setPreferences((prev: any) => ({
+            ...prev,
+            darkMode: docSnap.data().preferences.darkMode
+          }));
+          setTheme(docSnap.data().preferences.darkMode ? 'dark' : 'light');
+        } else {
+          const local = localStorage.getItem('agrisense_dark_mode');
+          if (local !== null) {
+            setPreferences((prev: any) => ({ ...prev, darkMode: local === 'true' }));
+            setTheme(local === 'true' ? 'dark' : 'light');
+          }
+        }
       } else {
-        setProfileData({
-          name: user.name,
-          email: user.email,
-          role: user.role,
-        });
+        setProfileData(null);
+        setIsEditing(false);
       }
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, [user]);
+  }, [user, setTheme]);
 
   const [preferences, setPreferences] = useState({
     emailNotifications: true,
@@ -56,19 +81,36 @@ export function Profile() {
   const handleSave = async () => {
     if (!user) return;
     setError('');
+    setSaving(true);
     try {
-      await updateDoc(doc(db, 'users', user.id), profileData);
+      await updateDoc(getUserDocRef(user), profileData);
       setIsEditing(false);
+      toast({
+        title: 'Profile updated',
+        description: 'Your profile has been saved successfully.',
+        duration: 2000,
+      });
     } catch (e: any) {
       setError(e.message || 'Failed to update profile');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const togglePreference = (key: keyof typeof preferences) => {
-    setPreferences(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
+  const togglePreference = async (key: keyof typeof preferences) => {
+    setPreferences(prev => {
+      const updated = { ...prev, [key]: !prev[key] };
+      if (key === 'darkMode') {
+        setTheme(!prev.darkMode ? 'dark' : 'light');
+        localStorage.setItem('agrisense_dark_mode', String(!prev.darkMode));
+        if (user) {
+          updateDoc(getUserDocRef(user), {
+            'preferences.darkMode': !prev.darkMode
+          });
+        }
+      }
+      return updated;
+    });
   };
 
   const stats = [
@@ -84,7 +126,7 @@ export function Profile() {
     setDeleting(true);
     setError('');
     try {
-      await deleteDoc(doc(db, 'users', user.id));
+      await deleteDoc(getUserDocRef(user));
       if (auth.currentUser) {
         await deleteUser(auth.currentUser);
       }
@@ -96,7 +138,11 @@ export function Profile() {
   };
 
   if (loading) return <div>Loading profile...</div>;
-  if (!profileData) return <div>No profile data found.</div>;
+  if (!profileData) return (
+    <div className="bg-yellow-100 text-yellow-800 p-4 rounded">
+      <p>No profile data found. Please complete your onboarding or contact support.</p>
+    </div>
+  );
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -104,22 +150,23 @@ export function Profile() {
         <div className="flex gap-2">
           {isEditing ? (
             <>
-              <Button variant="outline" onClick={() => setIsEditing(false)}>
+              <Button variant="outline" onClick={() => setIsEditing(false)} disabled={saving}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} className="bg-green-600 hover:bg-green-700">
+              <Button onClick={handleSave} className="bg-green-600 hover:bg-green-700" disabled={saving}>
                 <Save className="w-4 h-4 mr-2" />
-                Save
+                <span className="hidden xs:inline">{saving ? 'Saving...' : 'Save'}</span>
               </Button>
             </>
           ) : (
-            <Button onClick={() => setIsEditing(true)} variant="outline">
-              <Edit className="w-4 h-4 mr-2" />
-              Edit Profile
+            <Button onClick={() => setIsEditing(true)} variant="outline" className="px-2 sm:px-4">
+              <Edit className="w-5 h-5 sm:mr-2" />
+              <span className="hidden sm:inline">Edit Profile</span>
             </Button>
           )}
-          <Button onClick={handleDeleteAccount} className="bg-red-600 hover:bg-red-700 text-white" disabled={deleting}>
-            {deleting ? 'Deleting...' : 'Delete Account'}
+          <Button onClick={handleDeleteAccount} className="bg-black text-white px-2 sm:bg-red-600 sm:hover:bg-red-700 sm:px-4" disabled={deleting}>
+            <span className="sm:hidden"><Trash2 className="w-5 h-5" /></span>
+            <span className="hidden sm:inline">{deleting ? 'Deleting...' : 'Delete Account'}</span>
           </Button>
         </div>
       </div>
@@ -136,8 +183,38 @@ export function Profile() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-20 h-20 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+                <div className="w-20 h-20 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center overflow-hidden relative group">
+                  {profileData.photoURL ? (
+                    <img
+                      src={profileData.photoURL}
+                      alt="Profile"
+                      className="w-20 h-20 object-cover rounded-full"
+                    />
+                  ) : (
                   <User className="w-10 h-10 text-green-600 dark:text-green-400" />
+                  )}
+                  {isEditing && (
+                    <label className="absolute bottom-0 right-0 m-2 cursor-pointer group-hover:scale-110 transition-transform" title="Upload profile image">
+                      <span className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10" />
+                      <Camera className="w-7 h-7 text-white drop-shadow z-20 relative" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        title="Upload profile image"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setProfileData((prev: any) => ({ ...prev, photoURL: reader.result }));
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
                 </div>
                 <div>
                   <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{profileData.name}</h3>
@@ -237,6 +314,7 @@ export function Profile() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Email Notifications</span>
                   <button
+                    title="Toggle Email Notifications"
                     onClick={() => togglePreference('emailNotifications')}
                     className={`w-10 h-6 rounded-full relative transition-colors ${
                       preferences.emailNotifications ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'
@@ -250,6 +328,7 @@ export function Profile() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">SMS Alerts</span>
                   <button
+                    title="Toggle SMS Alerts"
                     onClick={() => togglePreference('smsAlerts')}
                     className={`w-10 h-6 rounded-full relative transition-colors ${
                       preferences.smsAlerts ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'
@@ -263,6 +342,7 @@ export function Profile() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Dark Mode</span>
                   <button
+                    title="Toggle Dark Mode"
                     onClick={() => togglePreference('darkMode')}
                     className={`w-10 h-6 rounded-full relative transition-colors ${
                       preferences.darkMode ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'
@@ -307,19 +387,21 @@ export function Profile() {
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                   <span className="text-sm text-gray-600 dark:text-gray-400">
-                    Joined {new Date(profileData.joinDate).toLocaleDateString()}
+                    Joined {profileData.joinDate && !isNaN(new Date(profileData.joinDate).getTime())
+                      ? new Date(profileData.joinDate).toLocaleDateString()
+                      : 'N/A'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                   <span className="text-sm text-gray-600 dark:text-gray-400">
-                    {profileData.specialization}
+                    {profileData.name || 'N/A'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                   <span className="text-sm text-gray-600 dark:text-gray-400">
-                    {profileData.location}
+                    {profileData.location || 'N/A'}
                   </span>
                 </div>
               </div>

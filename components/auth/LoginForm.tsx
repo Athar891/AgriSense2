@@ -125,12 +125,6 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
                         Seller
                       </div>
                     </SelectItem>
-                    <SelectItem value="admin">
-                      <div className="flex items-center gap-2">
-                        <Shield className="w-4 h-4" />
-                        Admin
-                      </div>
-                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -138,22 +132,28 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
                 {loading ? 'Signing In...' : 'Sign In'}
               </Button>
 
-              <Button type="button" onClick={handleGoogleLogin} className="w-full bg-blue-600 hover:bg-blue-700 mt-2" disabled={loading}>
+              <Button
+                type="button"
+                onClick={handleGoogleLogin}
+                className="w-full flex items-center justify-center gap-2 bg-white border border-gray-300 text-[#3c4043] font-medium hover:bg-gray-100 mt-2 shadow-sm transition-colors"
+                disabled={loading}
+              >
+                <svg className="w-5 h-5" viewBox="0 0 48 48"><g><path fill="#4285F4" d="M24 9.5c3.54 0 6.36 1.53 7.82 2.81l5.8-5.8C34.36 3.54 29.64 1.5 24 1.5 14.82 1.5 6.88 7.48 3.34 15.44l6.74 5.23C12.12 14.36 17.62 9.5 24 9.5z"/><path fill="#34A853" d="M46.15 24.5c0-1.64-.15-3.22-.43-4.74H24v9.04h12.44c-.54 2.9-2.18 5.36-4.64 7.04l7.18 5.59C43.98 37.36 46.15 31.36 46.15 24.5z"/><path fill="#FBBC05" d="M10.08 28.27A14.5 14.5 0 0 1 9.5 24c0-1.48.25-2.91.7-4.27l-6.74-5.23A23.94 23.94 0 0 0 0 24c0 3.77.9 7.34 2.5 10.5l7.58-6.23z"/><path fill="#EA4335" d="M24 46.5c6.48 0 11.92-2.14 15.9-5.84l-7.18-5.59c-2 1.36-4.54 2.18-8.72 2.18-6.38 0-11.88-4.86-13.92-11.27l-7.58 6.23C6.88 40.52 14.82 46.5 24 46.5z"/><path fill="none" d="M0 0h48v48H0z"/></g></svg>
                 {loading ? 'Signing In...' : 'Sign in with Google'}
               </Button>
 
               <div className="text-center">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Don't have an account?{' '}
-                  <button
+                <Button
                     type="button"
                     onClick={onSwitchToSignup}
-                    className="text-green-600 hover:text-green-700 font-medium"
+                  className="text-green-600 hover:text-green-700 font-medium w-full mt-2 bg-transparent border-0 shadow-none"
                   >
-                    Sign Up
-                  </button>
-                </p>
+                  Sign up as Seller
+                </Button>
               </div>
+              <p className="text-xs text-gray-500 text-center mt-2">
+                Farmer's can only google sign in
+              </p>
             </form>
           </CardContent>
         </Card>

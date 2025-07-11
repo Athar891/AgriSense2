@@ -12,7 +12,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 
-interface User {
+export interface User {
   id: string;
   email: string;
   name: string;
@@ -40,6 +40,15 @@ export const useAuth = () => {
   return context;
 };
 
+function getUserDocRef(userOrUidAndRole: { id: string, role: string } | { uid: string, role: string }) {
+  const id = 'id' in userOrUidAndRole ? userOrUidAndRole.id : userOrUidAndRole.uid;
+  const role = userOrUidAndRole.role;
+  if (role === 'farmer') return doc(db, 'farmers', id);
+  if (role === 'seller') return doc(db, 'sellers', id);
+  throw new Error('Unknown role');
+}
+
+export { getUserDocRef };
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -48,21 +57,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Get user profile from Firestore
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data() as User;
-          setUser(userData);
+        // Try to get user profile from both collections
+        let userDoc, userData, foundRole;
+        for (const role of ['farmer', 'seller']) {
+          const ref = getUserDocRef({ id: firebaseUser.uid, role });
+          const docSnap = await getDoc(ref);
+          if (docSnap.exists()) {
+            userDoc = docSnap;
+            userData = docSnap.data();
+            foundRole = role;
+            break;
+          }
+        }
+        if (userDoc) {
+          setUser({ ...userData, id: firebaseUser.uid, role: foundRole });
           setNeedsOnboarding(!userData.role || typeof userData.role !== 'string' || userData.role.length === 0);
         } else {
-          // If no profile, create a minimal one (no role yet)
-          const newUser: User = {
+          // If no profile, create a minimal one in 'farmers' by default
+          const newUser = {
             id: firebaseUser.uid,
             email: firebaseUser.email || '',
             name: firebaseUser.displayName || '',
-            role: undefined as any, // will trigger onboarding
+            role: 'farmer',
           };
-          await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+          await setDoc(getUserDocRef(newUser), newUser);
           setUser(newUser);
           setNeedsOnboarding(true);
         }
@@ -79,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const completeOnboarding = async (data: Partial<User>) => {
     if (!user) return;
     const updatedUser = { ...user, ...data };
-    await setDoc(doc(db, 'users', user.id), updatedUser, { merge: true });
+    await setDoc(getUserDocRef(updatedUser), updatedUser, { merge: true });
     setUser(updatedUser);
     setNeedsOnboarding(false);
   };
@@ -87,10 +105,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string, role: 'farmer' | 'seller' | 'admin') => {
     try {
       const result = await signInWithEmailAndPassword(auth, email, password);
-      // Check role in Firestore
-      const userDoc = await getDoc(doc(db, 'users', result.user.uid));
+      const ref = getUserDocRef({ id: result.user.uid, role });
+      const userDoc = await getDoc(ref);
       if (userDoc.exists() && userDoc.data().role === role) {
-        setUser(userDoc.data() as User);
+        setUser({ ...userDoc.data(), id: result.user.uid, role });
         setIsAuthenticated(true);
         return { success: true };
       } else {
@@ -105,13 +123,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signup = async (userData: { email: string; password: string; name: string; role: 'farmer' | 'seller' | 'admin' }) => {
     try {
       const result = await createUserWithEmailAndPassword(auth, userData.email, userData.password);
-      const newUser: User = {
+      const newUser = {
         id: result.user.uid,
         email: userData.email,
         name: userData.name,
         role: userData.role
       };
-      await setDoc(doc(db, 'users', result.user.uid), newUser);
+      await setDoc(getUserDocRef(newUser), newUser);
       setUser(newUser);
       setIsAuthenticated(true);
       return { success: true };
@@ -123,26 +141,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithGoogle = async (role: 'farmer' | 'seller' | 'admin') => {
     try {
       const result = await signInWithPopup(auth, provider);
-      // Check if user profile exists
-      const userDoc = await getDoc(doc(db, 'users', result.user.uid));
-      if (!userDoc.exists()) {
+      let userDoc, userData, foundRole;
+      for (const r of ['farmer', 'seller']) {
+        const ref = getUserDocRef({ id: result.user.uid, role: r });
+        const docSnap = await getDoc(ref);
+        if (docSnap.exists()) {
+          userDoc = docSnap;
+          userData = docSnap.data();
+          foundRole = r;
+          break;
+        }
+      }
+      if (!userDoc) {
         // Create user profile with selected role
-        const newUser: User = {
+        const newUser = {
           id: result.user.uid,
           email: result.user.email || '',
           name: result.user.displayName || '',
           role,
         };
-        await setDoc(doc(db, 'users', result.user.uid), newUser);
+        await setDoc(getUserDocRef(newUser), newUser);
         setUser(newUser);
       } else {
-        const userData = userDoc.data() as User;
-        // If role is missing, set it to the selected role
         if (!userData.role || typeof userData.role !== 'string' || userData.role.length === 0) {
-          await setDoc(doc(db, 'users', result.user.uid), { ...userData, role }, { merge: true });
+          await setDoc(getUserDocRef({ id: result.user.uid, role }), { ...userData, role }, { merge: true });
           setUser({ ...userData, role });
         } else {
-          setUser(userData);
+          setUser({ ...userData, id: result.user.uid, role: foundRole });
         }
       }
       setIsAuthenticated(true);

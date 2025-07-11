@@ -148,20 +148,21 @@ export function WeatherWidget({ compact = false, showLocation = true, className 
             </CardTitle>
             <div className="flex items-center gap-2">
               {alerts.length > 0 && (
+                <div className="relative flex items-center">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setShowAlerts(!showAlerts)}
-                  className="relative"
-                >
-                  <AlertTriangle className="w-4 h-4" />
-                  <Badge 
-                    variant="destructive" 
-                    className="absolute -top-2 -right-2 w-5 h-5 text-xs p-0"
+                    className="relative flex items-center justify-center"
                   >
+                    <span className="relative">
+                      <AlertTriangle className="w-5 h-5" />
+                      <span className="absolute -top-2 -right-2 w-5 h-5 flex items-center justify-center rounded-full border-2 border-white dark:border-gray-900 bg-red-500 text-white text-xs font-bold shadow">
                     {alerts.length}
-                  </Badge>
+                      </span>
+                    </span>
                 </Button>
+                </div>
               )}
               <Button
                 variant="outline"

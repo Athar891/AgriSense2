@@ -1,5 +1,5 @@
 'use client';
-
+import Spline from '@splinetool/react-spline/next';
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,10 @@ import { callGeminiAPI, prepareImageForGemini } from '@/lib/gemini';
 import { voiceService, VoiceState } from '@/lib/voice';
 import { VoiceAnimation } from '@/components/ui/voice-animation';
 import { weatherService } from '@/lib/weather';
+import { useAuth } from '@/components/auth/AuthProvider';
+import { getUserDocRef } from '@/components/auth/AuthProvider';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 interface ChatMessage {
   id: number;
@@ -67,18 +71,9 @@ interface CameraState {
 
 export function AIAssistant() {
   const [message, setMessage] = useState('');
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() => {
-    let stored = sessionStorage.getItem('agrisense_chat_history');
-    if (!stored) {
-      stored = localStorage.getItem('agrisense_chat_history');
-    }
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch {}
-    }
-    return [];
-  });
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [voiceState, setVoiceState] = useState<VoiceState>({
@@ -165,6 +160,8 @@ export function AIAssistant() {
   };
 
   const [quickQuestions, setQuickQuestions] = useState(getRandomQuestions());
+
+  const { user } = useAuth();
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1248,18 +1245,36 @@ export function AIAssistant() {
     return 3; // default
   }
 
-  // Save chat history to sessionStorage and localStorage on update
+  // Load chat history from Firestore on mount (per user)
   useEffect(() => {
-    const data = JSON.stringify(chatHistory);
-    sessionStorage.setItem('agrisense_chat_history', data);
-    localStorage.setItem('agrisense_chat_history', data);
-  }, [chatHistory]);
+    if (!user) return;
+    setChatLoading(true);
+    setChatError(null);
+    const aiChatDocRef = doc(getUserDocRef(user), 'ai_chats', 'history');
+    getDoc(aiChatDocRef)
+      .then((docSnap) => {
+        if (docSnap.exists()) {
+          setChatHistory(docSnap.data().history || []);
+        } else {
+          setChatHistory([]);
+        }
+      })
+      .catch((e) => setChatError(e.message || 'Failed to load chat history'))
+      .finally(() => setChatLoading(false));
+  }, [user]);
+
+  // Save chat history to Firestore whenever it changes (per user)
+  useEffect(() => {
+    if (!user) return;
+    const aiChatDocRef = doc(getUserDocRef(user), 'ai_chats', 'history');
+    setDoc(aiChatDocRef, { history: chatHistory });
+  }, [chatHistory, user]);
 
   return (
     <div className="flex flex-col h-screen">
       {/* Fixed Header */}
-      <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 relative">
+        <div className="flex items-center gap-3 absolute left-1/2 -translate-x-1/2">
           <div className="bg-gradient-to-r from-green-500 to-blue-500 p-2 rounded-lg">
             <Sparkles className="w-6 h-6 text-white" />
           </div>
@@ -1412,27 +1427,27 @@ export function AIAssistant() {
                         onChange={(e) => setMessage(e.target.value)}
                         onKeyPress={handleKeyPress}
               onPaste={handlePaste}
-                        className="min-h-[60px] max-h-[120px] resize-none pr-12"
+                        className="min-h-[40px] max-h-[80px] resize-none pr-10 sm:min-h-[60px] sm:max-h-[120px] sm:pr-12 text-xs sm:text-sm py-1 sm:py-2"
                         disabled={isLoading || voiceState.isListening}
                       />
                     </div>
                   <Button 
                     onClick={handleSendClick} 
-                    className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 px-6 h-[60px] shadow-lg"
+                    className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 px-3 h-10 sm:px-6 sm:h-[60px] shadow-lg text-xs sm:text-sm py-1 sm:py-2"
             disabled={(!message.trim() && !pastedImage) || isLoading}
                   >
                     {isLoading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
                     ) : (
-                      <Send className="w-5 h-5" />
+                      <Send className="w-4 h-4 sm:w-5 sm:h-5" />
                     )}
                   </Button>
           <Button
             onClick={startLiveAssistant}
-            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 px-6 h-[60px] shadow-lg transform hover:scale-105 transition-all duration-200"
+            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 px-3 h-10 sm:px-6 sm:h-[60px] shadow-lg transform hover:scale-105 transition-all duration-200 text-xs sm:text-sm py-1 sm:py-2"
             title="Live Assistant"
           >
-            <Camera className="w-5 h-5 text-white" />
+            <Camera className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                   </Button>
                 </div>
               </div>

@@ -5,6 +5,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/components/auth/AuthProvider';
 import { OnboardingModal } from '@/components/auth/OnboardingModal';
+import { UserProvider } from '@/components/auth/UserContext';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -27,11 +28,13 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <UserProvider>
           <AuthProvider>
             <OnboardingModal />
             {children}
             <Toaster />
           </AuthProvider>
+          </UserProvider>
         </ThemeProvider>
       </body>
     </html>

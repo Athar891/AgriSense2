@@ -254,7 +254,6 @@ export function Marketplace({ userRole, cart, onAddToCart, onRemoveFromCart, onU
           </div>
         </div>
         
-        {/* Mobile Filter and Category Buttons */}
         <div className="flex gap-2 sm:gap-3">
           <Button 
             variant="outline" 
@@ -262,7 +261,7 @@ export function Marketplace({ userRole, cart, onAddToCart, onRemoveFromCart, onU
             onClick={() => setShowCategories(!showCategories)}
           >
             <SlidersHorizontal className="w-4 h-4" />
-            <span className="hidden sm:inline">Categories</span>
+            <span className="inline">Categories</span>
             <ChevronDown className={`w-4 h-4 transition-transform ${showCategories ? 'rotate-180' : ''}`} />
           </Button>
           
@@ -427,8 +426,13 @@ export function Marketplace({ userRole, cart, onAddToCart, onRemoveFromCart, onU
         </div>
       </div>
 
-      {/* Categories - Mobile Collapsible */}
-      <div className={`${showCategories ? 'block' : 'hidden'} sm:block`}>
+      {/* Categories - Collapsible (always controlled by showCategories) */}
+      <div
+        className={`transition-all duration-300 overflow-hidden ${showCategories ? 'max-h-40 opacity-100 mt-2' : 'max-h-0 opacity-0'} `}
+        style={{
+          // Optionally, you can tweak maxHeight for more/less categories
+        }}
+      >
         <div className="flex flex-wrap gap-2">
           {categories.map((category) => (
             <Button
@@ -436,7 +440,8 @@ export function Marketplace({ userRole, cart, onAddToCart, onRemoveFromCart, onU
               variant={activeCategory === category.id ? "default" : "outline"}
               onClick={() => {
                 setActiveCategory(category.id);
-                setShowCategories(false); // Close on mobile after selection
+                // Optionally, keep categories open after selection, or close:
+                // setShowCategories(false);
               }}
               size="sm"
               className={`${activeCategory === category.id ? "bg-green-600 hover:bg-green-700" : ""} text-xs sm:text-sm`}
@@ -454,7 +459,7 @@ export function Marketplace({ userRole, cart, onAddToCart, onRemoveFromCart, onU
           {filters.priceRange.min > 0 && (
             <Badge variant="secondary" className="flex items-center gap-1 text-xs">
               Min: ₹{filters.priceRange.min}
-              <button onClick={() => handleFilterChange('priceRange', { ...filters.priceRange, min: 0 })}>
+              <button title="Remove min price filter" onClick={() => handleFilterChange('priceRange', { ...filters.priceRange, min: 0 })}>
                 <X className="w-3 h-3" />
               </button>
             </Badge>
@@ -462,7 +467,7 @@ export function Marketplace({ userRole, cart, onAddToCart, onRemoveFromCart, onU
           {filters.priceRange.max < 10000 && (
             <Badge variant="secondary" className="flex items-center gap-1 text-xs">
               Max: ₹{filters.priceRange.max}
-              <button onClick={() => handleFilterChange('priceRange', { ...filters.priceRange, max: 10000 })}>
+              <button title="Remove max price filter" onClick={() => handleFilterChange('priceRange', { ...filters.priceRange, max: 10000 })}>
                 <X className="w-3 h-3" />
               </button>
             </Badge>
@@ -470,7 +475,7 @@ export function Marketplace({ userRole, cart, onAddToCart, onRemoveFromCart, onU
           {filters.inStock !== null && (
             <Badge variant="secondary" className="flex items-center gap-1 text-xs">
               {filters.inStock ? 'In Stock' : 'Out of Stock'}
-              <button onClick={() => handleFilterChange('inStock', null)}>
+              <button title="Remove stock filter" onClick={() => handleFilterChange('inStock', null)}>
                 <X className="w-3 h-3" />
               </button>
             </Badge>
@@ -478,7 +483,7 @@ export function Marketplace({ userRole, cart, onAddToCart, onRemoveFromCart, onU
           {filters.rating > 0 && (
             <Badge variant="secondary" className="flex items-center gap-1 text-xs">
               {filters.rating}+ Stars
-              <button onClick={() => handleFilterChange('rating', 0)}>
+              <button title="Remove rating filter" onClick={() => handleFilterChange('rating', 0)}>
                 <X className="w-3 h-3" />
               </button>
             </Badge>
@@ -486,7 +491,7 @@ export function Marketplace({ userRole, cart, onAddToCart, onRemoveFromCart, onU
           {filters.sortBy !== 'name' && (
             <Badge variant="secondary" className="flex items-center gap-1 text-xs">
               Sort: {filters.sortBy}
-              <button onClick={() => handleFilterChange('sortBy', 'name')}>
+              <button title="Remove sort filter" onClick={() => handleFilterChange('sortBy', 'name')}>
                 <X className="w-3 h-3" />
               </button>
             </Badge>
@@ -500,43 +505,38 @@ export function Marketplace({ userRole, cart, onAddToCart, onRemoveFromCart, onU
       {/* Products Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
         {filteredProducts.map((product) => (
-          <Card key={product.id} className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelectedProduct(product)}>
+          <Card key={product.id} className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer p-2 sm:p-0" onClick={() => setSelectedProduct(product)}>
             <CardHeader className="p-0">
               <div className="relative overflow-hidden rounded-t-lg">
                 <img 
                   src={product.image} 
                   alt={product.name}
-                  className="w-full h-auto object-cover sm:aspect-video"
+                  className="w-full h-32 object-cover sm:aspect-video sm:h-auto"
                 />
                 {!product.inStock && (
                   <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                    <Badge className="bg-red-500 text-white">Out of Stock</Badge>
+                    <Badge className="bg-red-500 text-white text-xs px-2 py-1 sm:text-base sm:px-2.5 sm:py-0.5">Out of Stock</Badge>
                   </div>
                 )}
               </div>
             </CardHeader>
-            <CardContent className="p-3 sm:p-4">
-              <div className="space-y-2">
-                <div className="flex justify-between items-start gap-2">
+            <CardContent className="p-2 sm:p-4">
+              <div className="space-y-1 sm:space-y-2">
+                <div className="flex justify-between items-start gap-1 sm:gap-2">
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base line-clamp-2">
-                      {product.name}
-                    </h3>
-                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 truncate">
-                      by {product.seller}
-                    </p>
+                    <h3 className="font-semibold text-gray-900 dark:text-white text-xs sm:text-base line-clamp-2">{product.name}</h3>
+                    <p className="text-[10px] sm:text-sm text-gray-600 dark:text-gray-400 truncate">by {product.seller}</p>
                   </div>
                   {/* Mobile: Rating and Price on the right */}
-                  <div className="flex flex-col items-end gap-1 sm:hidden">
-                    <div className="flex items-center gap-1">
+                  <div className="flex flex-col items-end gap-0.5 sm:hidden">
+                    <div className="flex items-center gap-0.5">
                       <Star className="w-3 h-3 text-yellow-500 fill-current" />
-                      <span className="text-xs font-medium">{product.rating}</span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">({product.reviews})</span>
+                      <span className="text-[10px] font-medium">{product.rating}</span>
+                      <span className="text-[10px] text-gray-500 dark:text-gray-400">({product.reviews})</span>
                     </div>
-                    <span className="text-lg font-bold text-green-600">₹{product.price}</span>
+                    <span className="text-base font-bold text-green-600">₹{product.price}</span>
                   </div>
                 </div>
-                
                 {/* Desktop: Rating and Price below */}
                 <div className="hidden sm:block">
                   <div className="flex items-center gap-1">
@@ -545,11 +545,9 @@ export function Marketplace({ userRole, cart, onAddToCart, onRemoveFromCart, onU
                     <span className="text-xs text-gray-500 dark:text-gray-400">({product.reviews})</span>
                   </div>
                 </div>
-                
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2">
                   {/* Desktop: Price on the left */}
                   <span className="hidden sm:block text-2xl font-bold text-green-600">₹{product.price}</span>
-                  
                   <Button 
                     size="sm"
                     disabled={!product.inStock}
@@ -568,7 +566,7 @@ export function Marketplace({ userRole, cart, onAddToCart, onRemoveFromCart, onU
                         duration: 2000,
                       });
                     }}
-                    className="bg-green-600 hover:bg-green-700 w-full sm:w-auto text-xs sm:text-sm h-8 sm:h-9"
+                    className="bg-green-600 hover:bg-green-700 w-full sm:w-auto text-xs sm:text-sm h-7 sm:h-9 px-2 sm:px-3"
                   >
                     <ShoppingCart className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
                     <span className="hidden sm:inline">Add to Cart</span>
