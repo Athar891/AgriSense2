@@ -889,7 +889,12 @@ export function AIAssistant() {
 
   // Voice functions
   const speakResponse = async (text: string): Promise<void> => {
-    if (!voiceEnabled || liveAssistant.isPaused) return;
+    if (!voiceEnabled || liveAssistant.isPaused) {
+      console.log('VoiceService: Speech disabled or assistant paused');
+      return;
+    }
+    
+    console.log('VoiceService: Attempting to speak:', text.substring(0, 100) + '...');
     
     setLiveAssistant(prev => ({ ...prev, isSpeaking: true }));
     
@@ -900,9 +905,10 @@ export function AIAssistant() {
       voiceService.speak(
         cleanedText,
         () => {
-          // Speech started
+          console.log('VoiceService: Speech synthesis started successfully');
         },
         () => {
+          console.log('VoiceService: Speech synthesis completed');
           setLiveAssistant(prev => ({ ...prev, isSpeaking: false }));
           resolve();
         }
@@ -1351,6 +1357,62 @@ export function AIAssistant() {
           </Button>
         </div>
       </div>
+
+      {/* Debug Panel */}
+      {showDebugPanel && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800 p-4">
+          <div className="max-w-4xl mx-auto">
+            <h3 className="text-lg font-semibold text-yellow-800 dark:text-yellow-200 mb-3">Voice Debug Panel</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <h4 className="font-medium text-yellow-700 dark:text-yellow-300">Voice Service Status</h4>
+                <div className="text-sm space-y-1">
+                  <div>Supported: <span className={voiceService.isSupported() ? 'text-green-600' : 'text-red-600'}>{voiceService.isSupported() ? 'Yes' : 'No'}</span></div>
+                  <div>Speaking: <span className={liveAssistant.isSpeaking ? 'text-blue-600' : 'text-gray-600'}>{liveAssistant.isSpeaking ? 'Yes' : 'No'}</span></div>
+                  <div>Listening: <span className={liveAssistant.isListening ? 'text-yellow-600' : 'text-gray-600'}>{liveAssistant.isListening ? 'Yes' : 'No'}</span></div>
+                  <div>Protocol: <span className="text-gray-600">{typeof window !== 'undefined' ? window.location.protocol : 'unknown'}</span></div>
+                  <div>Browser: <span className={voiceService.getDebugInfo().browser.recommended ? 'text-green-600' : 'text-yellow-600'}>
+                    {voiceService.getDebugInfo().browser.isChrome ? 'Chrome' : 
+                     voiceService.getDebugInfo().browser.isEdge ? 'Edge' :
+                     voiceService.getDebugInfo().browser.isFirefox ? 'Firefox' :
+                     voiceService.getDebugInfo().browser.isSafari ? 'Safari' : 'Other'}
+                  </span></div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <h4 className="font-medium text-yellow-700 dark:text-yellow-300">Quick Tests</h4>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={testVoiceService} className="text-xs">
+                    Test Mic
+                  </Button>
+                  <Button size="sm" onClick={testSpeechSynthesis} className="text-xs">
+                    Test Speech
+                  </Button>
+                </div>
+                {liveAssistant.error && (
+                  <div className="text-red-600 text-sm mt-2">
+                    Error: {liveAssistant.error}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="mt-3 text-xs text-yellow-600 dark:text-yellow-400">
+              <strong>Troubleshooting:</strong> If voice isn't working, check browser permissions, ensure HTTPS (except localhost), 
+              and try refreshing the page. Check browser console for detailed error messages.
+            </div>
+            {voiceService.getDebugInfo().recommendations.length > 0 && (
+              <div className="mt-2 text-xs">
+                <strong>Recommendations:</strong>
+                <ul className="list-disc list-inside mt-1 space-y-1">
+                  {voiceService.getDebugInfo().recommendations.map((rec, index) => (
+                    <li key={index} className="text-yellow-600 dark:text-yellow-400">{rec}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Scrollable Chat Area */}
       <div className="flex-1 overflow-y-auto bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 pb-24">

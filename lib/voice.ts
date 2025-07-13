@@ -299,15 +299,58 @@ export class VoiceService {
   }
 
   public getDebugInfo(): any {
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown';
+    const isChrome = userAgent.includes('Chrome') && !userAgent.includes('Edg');
+    const isEdge = userAgent.includes('Edg');
+    const isFirefox = userAgent.includes('Firefox');
+    const isSafari = userAgent.includes('Safari') && !userAgent.includes('Chrome');
+    
     return {
       isInitialized: this.isInitialized,
       recognitionSupported: this.recognition !== null,
       synthesisSupported: this.synthesis !== null,
       isSpeaking: this.isSpeaking(),
       protocol: typeof window !== 'undefined' ? window.location.protocol : 'unknown',
-      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-      voicesCount: this.synthesis ? this.synthesis.getVoices().length : 0
+      userAgent: userAgent,
+      browser: {
+        isChrome,
+        isEdge,
+        isFirefox,
+        isSafari,
+        recommended: isChrome || isEdge
+      },
+      voicesCount: this.synthesis ? this.synthesis.getVoices().length : 0,
+      recommendations: this.getRecommendations()
     };
+  }
+
+  private getRecommendations(): string[] {
+    const recommendations = [];
+    
+    if (typeof window !== 'undefined') {
+      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+        recommendations.push('Use HTTPS for production (voice recognition requires it)');
+      }
+      
+      const userAgent = navigator.userAgent;
+      if (!userAgent.includes('Chrome') && !userAgent.includes('Edg')) {
+        recommendations.push('Use Chrome or Edge for best voice support');
+      }
+      
+      if (userAgent.includes('Firefox')) {
+        recommendations.push('Firefox has limited voice support - try Chrome or Edge');
+      }
+    }
+    
+    if (!this.recognition) {
+      recommendations.push('Speech recognition not supported in this browser');
+    }
+    
+    if (!this.synthesis) {
+      recommendations.push('Speech synthesis not supported in this browser');
+    }
+    
+    return recommendations;
   }
 }
 
