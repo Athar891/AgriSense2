@@ -85,6 +85,7 @@ export function AIAssistant() {
   });
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [volume, setVolume] = useState(0.5);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
@@ -1109,6 +1110,10 @@ export function AIAssistant() {
 
   const testVoiceService = () => {
     console.log('=== VOICE SERVICE TEST ===');
+    
+    // Get debug info
+    const debugInfo = voiceService.getDebugInfo();
+    console.log('Voice service debug info:', debugInfo);
     console.log('Voice service supported:', voiceService.isSupported());
     
     // Test microphone access
@@ -1120,23 +1125,23 @@ export function AIAssistant() {
         // Test voice service
         if (voiceService.isSupported()) {
           console.log('Testing voice service...');
-    voiceService.startListening(
-      (transcript) => {
+          voiceService.startListening(
+            (transcript) => {
               console.log('Test transcript received:', transcript);
               setLiveAssistant(prev => ({ ...prev, transcript: `Test: ${transcript}` }));
-      },
-      (error) => {
+            },
+            (error) => {
               console.error('Test listening error:', error);
               setLiveAssistant(prev => ({ ...prev, error: `Test error: ${error}` }));
-      },
-      () => {
+            },
+            () => {
               console.log('Test listening ended');
-      }
-    );
+            }
+          );
 
           // Stop after 5 seconds
           setTimeout(() => {
-    voiceService.stopListening();
+            voiceService.stopListening();
             console.log('Test listening stopped');
           }, 5000);
         } else {
@@ -1148,6 +1153,23 @@ export function AIAssistant() {
         console.error('Microphone access denied:', error);
         setLiveAssistant(prev => ({ ...prev, error: `Microphone access denied: ${error.message}` }));
       });
+  };
+
+  const testSpeechSynthesis = () => {
+    console.log('=== SPEECH SYNTHESIS TEST ===');
+    const testText = "Hello, this is a test of the speech synthesis. Can you hear me?";
+    
+    voiceService.speak(
+      testText,
+      () => {
+        console.log('Speech synthesis started');
+        setLiveAssistant(prev => ({ ...prev, isSpeaking: true }));
+      },
+      () => {
+        console.log('Speech synthesis ended');
+        setLiveAssistant(prev => ({ ...prev, isSpeaking: false }));
+      }
+    );
   };
 
   const formatMarkdown = (text: string): string => {
@@ -1281,8 +1303,43 @@ export function AIAssistant() {
           <div>
             <h2 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">AI Assistant</h2>
           </div>
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${voiceService.isSupported() ? 'bg-green-500' : 'bg-red-500'}`} 
+                 title={voiceService.isSupported() ? 'Voice supported' : 'Voice not supported'} />
+            <div className={`w-2 h-2 rounded-full ${liveAssistant.isSpeaking ? 'bg-blue-500 animate-pulse' : 'bg-gray-300'}`} 
+                 title={liveAssistant.isSpeaking ? 'Speaking' : 'Not speaking'} />
+            <div className={`w-2 h-2 rounded-full ${liveAssistant.isListening ? 'bg-yellow-500 animate-pulse' : 'bg-gray-300'}`} 
+                 title={liveAssistant.isListening ? 'Listening' : 'Not listening'} />
+          </div>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={testVoiceService}
+            className="flex items-center gap-2"
+            title="Test Voice Recognition"
+          >
+            <Mic className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={testSpeechSynthesis}
+            className="flex items-center gap-2"
+            title="Test Speech Synthesis"
+          >
+            <Volume2 className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDebugPanel(!showDebugPanel)}
+            className="flex items-center gap-2"
+            title="Voice Debug Panel"
+          >
+            <Bot className="w-4 h-4" />
+          </Button>
           <Button
             variant="outline"
             size="sm"
