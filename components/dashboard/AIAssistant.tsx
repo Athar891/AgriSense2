@@ -367,6 +367,12 @@ export function AIAssistant() {
     }
   };
 
+  // Ref to track if speech recognition is currently running
+  const recognitionActiveRef = useRef(false);
+
+  // Atomic deduplication ref for speech transcripts
+  const lastProcessedTranscriptRef = useRef<string>('');
+
   const startLiveListening = async () => {
     // Get current state using a callback to avoid stale state
     setLiveAssistant(currentState => {
@@ -422,40 +428,62 @@ export function AIAssistant() {
   };
 
   const startListeningProcess = () => {
+  // Guard: prevent duplicate recognition sessions
+  if (recognitionActiveRef.current) {
+    console.log('Recognition already active, not starting again');
+    return;
+  }
     // Start silence timer
     startSilenceTimer();
 
     try {
+      recognitionActiveRef.current = true;
       voiceService.startListening(
         (transcript) => {
-          console.log('Transcript received:', transcript);
-          setLiveAssistant(prev => ({ ...prev, transcript }));
-          
-          // Reset silence timer when user speaks
-          resetSilenceTimer();
-          
-          // Clear previous timeout
+          // Always clear previous transcript-processing timeout
           if (transcriptTimeoutRef.current) {
             clearTimeout(transcriptTimeoutRef.current);
           }
-          
+
+          // Only process if transcript is non-empty and not already processed
+          if (!transcript.trim() || transcript === lastProcessedTranscriptRef.current) return;
+
+          // Only update transcript if it's new for the input field
+          setLiveAssistant(prev => {
+            if (!transcript.trim() || transcript === prev.transcript) return prev;
+            return { ...prev, transcript };
+          });
+
           // Set timeout to process transcript after user stops speaking
           transcriptTimeoutRef.current = setTimeout(() => {
-            setLiveAssistant(currentState => {
-              if (transcript.trim() && transcript !== currentState.lastProcessedTranscript) {
-                console.log('Processing transcript:', transcript);
-                handleLiveInput(transcript);
-              }
-              return currentState;
-            });
-          }, 1500); // Wait 1.5 seconds after user stops speaking
+            // Double-check the ref before processing
+            if (!transcript.trim() || transcript === lastProcessedTranscriptRef.current) return;
+            lastProcessedTranscriptRef.current = transcript;
+            handleLiveInput(transcript);
+            // Clear transcript from input field after processing
+            setLiveAssistant(prev => ({ ...prev, transcript: '' }));
+          }, 1200); // Wait 1.2 seconds after user stops speaking
         },
         (error) => {
+          recognitionActiveRef.current = false;
           console.error('Listening error:', error);
-          setLiveAssistant(prev => ({ ...prev, error, isListening: false }));
+          let userErrorMsg = '';
+          if (error === 'network') {
+            userErrorMsg = 'Network error: Please check your internet connection and microphone permissions.';
+          } else if (error === 'Speech recognition already active') {
+            userErrorMsg = 'Microphone is already in use. Attempting to recover...';
+            voiceService.stopListening();
+            setTimeout(() => {
+              startLiveListening();
+            }, 1000);
+          } else {
+            userErrorMsg = `Mic error: ${error}`;
+          }
+          setLiveAssistant(prev => ({ ...prev, error: userErrorMsg, isListening: false }));
           clearAllTimeouts();
         },
         () => {
+          recognitionActiveRef.current = false;
           console.log('Listening ended');
           setLiveAssistant(currentState => {
             const newState = { ...currentState, isListening: false };
@@ -1267,7 +1295,15 @@ export function AIAssistant() {
   useEffect(() => {
     if (!user) return;
     const aiChatDocRef = doc(getUserDocRef(user), 'ai_chats', 'history');
-    setDoc(aiChatDocRef, { history: chatHistory });
+    setDoc(aiChatDocRef, {
+      history: chatHistory.map(msg => {
+        const cleaned: any = {};
+        for (const key in msg) {
+          if (msg[key] !== undefined) cleaned[key] = msg[key];
+        }
+        return cleaned;
+      })
+    });
   }, [chatHistory, user]);
 
   return (
@@ -1458,7 +1494,14 @@ export function AIAssistant() {
           <div className="relative w-full h-full flex flex-col">
             {/* Animated Bubble */}
             <div className="flex-1 flex items-center justify-center">
-              <div className={`relative ${liveAssistant.isListening ? 'animate-pulse' : ''}`}>
+              <div
+  className={`relative ${liveAssistant.isListening ? 'animate-pulse' : ''} cursor-pointer`}
+  role="button"
+  tabIndex={0}
+  aria-label={liveAssistant.isListening ? 'Stop listening' : 'Start listening'}
+  onClick={toggleMic}
+  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggleMic(); }}
+>
                 <div className={`w-32 h-32 rounded-full flex items-center justify-center ${
                   liveAssistant.isListening 
                     ? 'bg-gradient-to-r from-blue-500 to-purple-600 animate-pulse' 
@@ -1489,18 +1532,7 @@ export function AIAssistant() {
       
                 {/* Status Text */}
                 <div className="absolute -bottom-12 left-1/2 transform -translate-x-1/2 text-white text-center">
-                  <p className="text-lg font-semibold">
-                    {liveAssistant.isListening 
-                      ? 'Listening...' 
-                      : liveAssistant.isProcessing 
-                      ? 'Processing...' 
-                      : liveAssistant.isSpeaking 
-                      ? 'Speaking...' 
-                      : liveAssistant.isPaused 
-                      ? 'Paused' 
-                      : 'Ready to listen'
-                    }
-                  </p>
+                  
                   {liveAssistant.transcript && (
                     <p className="text-sm opacity-80 mt-1">"{liveAssistant.transcript}"</p>
                   )}
@@ -1522,37 +1554,7 @@ export function AIAssistant() {
                 )}
               </Button>
               
-              <Button
-                onClick={toggleMic}
-                className={`w-16 h-16 rounded-full backdrop-blur-sm border ${
-                  liveAssistant.micEnabled 
-                    ? liveAssistant.isListening
-                      ? 'bg-blue-500/80 hover:bg-blue-500 border-blue-400 animate-pulse'
-                      : 'bg-green-500/80 hover:bg-green-500 border-green-400'
-                    : 'bg-red-500/80 hover:bg-red-500 border-red-400'
-                }`}
-                title={
-                  liveAssistant.micEnabled 
-                    ? liveAssistant.isListening 
-                      ? 'Stop listening' 
-                      : 'Start listening'
-                    : 'Enable microphone'
-                }
-              >
-                {liveAssistant.micEnabled ? (
-                  liveAssistant.isListening ? (
-                    <div className="flex items-center gap-1">
-                      <div className="w-1 h-1 bg-white rounded-full animate-bounce"></div>
-                      <div className="w-1 h-1 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-1 h-1 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-        </div>
-                  ) : (
-                    <Mic className="w-6 h-6 text-white" />
-                  )
-                ) : (
-                  <MicOff className="w-6 h-6 text-white" />
-                )}
-              </Button>
+              
               
               <Button
                 onClick={openCamera}

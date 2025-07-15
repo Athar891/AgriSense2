@@ -1,5 +1,9 @@
 'use client';
 
+// Add satisfying click sound
+const clickAudio = typeof window !== 'undefined' ? new Audio('/click.mp3') : null;
+
+
 import { cn } from '@/lib/utils';
 import { 
   Home, 
@@ -43,6 +47,10 @@ export function Sidebar({ activeTab, onTabChange, userRole, isMobileMenuOpen, on
   };
 
   const handleTabChange = (tab: string) => {
+    if (clickAudio && clickAudio.readyState >= 2) {
+      clickAudio.currentTime = 0;
+      clickAudio.play().catch(() => {});
+    }
     onTabChange(tab);
     onMobileMenuToggle(); // Close mobile menu when tab is selected
   };

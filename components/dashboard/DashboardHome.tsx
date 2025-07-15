@@ -25,7 +25,6 @@ import {
   Wheat,
   Apple,
   Carrot,
-  DollarSign,
   BookOpen,
   Target,
   Zap,
@@ -33,6 +32,7 @@ import {
   Trash2,
   Minus
 } from 'lucide-react';
+import { FaRupeeSign } from 'react-icons/fa';
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { doc, setDoc, getDoc, updateDoc, collection, addDoc, getDocs, deleteDoc } from "firebase/firestore";
@@ -85,12 +85,48 @@ export function DashboardHome({ userRole }: DashboardHomeProps) {
     { pest: 'Spider Mites', severity: 'Low', affectedCrop: 'Soybeans', recommendation: 'Increase humidity' },
   ];
 
-  const marketPrices = [
+  // Live market prices state
+  const [marketPrices, setMarketPrices] = useState([
     { crop: 'Wheat', price: '₹2,450/ton', change: '+5.2%', trend: 'up' },
-    { crop: 'Corn', price: '₹1,850/ton', change: '-2.1%', trend: 'down' },
+    { crop: 'Corn', price: '₹2,250/ton', change: '-2.1%', trend: 'down' },
     { crop: 'Soybeans', price: '₹3,200/ton', change: '+8.7%', trend: 'up' },
     { crop: 'Rice', price: '₹2,800/ton', change: '+3.4%', trend: 'up' },
-  ];
+  ]);
+  const [marketError, setMarketError] = useState<string | null>(null);
+  const [marketLoading, setMarketLoading] = useState(false);
+
+  // Mock fetch function (replace with real API call)
+  async function fetchMarketPrices() {
+    // Simulate network delay
+    await new Promise(res => setTimeout(res, 500));
+    // Return mock data; replace with real fetch
+    return [
+      { crop: 'Wheat', price: '₹' + (2450 + Math.floor(Math.random()*100-50)) + '/quintal', change: ((Math.random()*10-5).toFixed(1))+'%', trend: Math.random() > 0.5 ? 'up' : 'down' },
+      { crop: 'Corn', price: '₹' + (1850 + Math.floor(Math.random()*100-50)) + '/quintal', change: ((Math.random()*10-5).toFixed(1))+'%', trend: Math.random() > 0.5 ? 'up' : 'down' },
+      { crop: 'Soybeans', price: '₹' + (3200 + Math.floor(Math.random()*100-50)) + '/quintal', change: ((Math.random()*10-5).toFixed(1))+'%', trend: Math.random() > 0.5 ? 'up' : 'down' },
+      { crop: 'Rice', price: '₹' + (2800 + Math.floor(Math.random()*100-50)) + '/quintal', change: ((Math.random()*10-5).toFixed(1))+'%', trend: Math.random() > 0.5 ? 'up' : 'down' },
+    ];
+  }
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    const loadPrices = async () => {
+      setMarketLoading(true);
+      setMarketError(null);
+      try {
+        const data = await fetchMarketPrices();
+        setMarketPrices(data);
+      } catch (err) {
+        setMarketError('Failed to fetch market prices.');
+      } finally {
+        setMarketLoading(false);
+      }
+    };
+    loadPrices();
+    interval = setInterval(loadPrices, 60000); // Update every 60 seconds
+    return () => clearInterval(interval);
+  }, []);
+
 
   const farmingTips = [
     { title: 'Optimal Harvesting Time', content: 'Harvest wheat when moisture content is 13-14% for best quality and storage.', icon: Wheat },
@@ -530,28 +566,32 @@ export function DashboardHome({ userRole }: DashboardHomeProps) {
           <CardHeader className="relative z-10">
             <CardTitle className="flex items-center gap-3 text-lg font-bold text-gray-900 dark:text-white">
               <div className="p-2 rounded-lg bg-gradient-to-br from-green-400 to-emerald-500 shadow-md">
-                <DollarSign className="w-5 h-5 text-white" />
+                <FaRupeeSign className="w-5 h-5 text-white" />
               </div>
               Market Prices
             </CardTitle>
           </CardHeader>
           <CardContent className="relative z-10">
-            <div className="space-y-3">
-              {marketPrices.map((item) => (
-                <div key={item.crop} className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 rounded-lg">
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">{item.crop}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{item.price}</p>
+            {marketLoading ? (
+              <div className="text-gray-500">Loading market prices...</div>
+            ) : marketError ? (
+              <div className="text-red-600">{marketError}</div>
+            ) : (
+              <div className="space-y-3">
+                {marketPrices.map((item) => (
+                  <div key={item.crop} className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 rounded-lg">
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">{item.crop}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{item.price}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-sm font-medium ${item.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>{item.change}</p>
+                      <div className={`w-2 h-2 rounded-full mt-1 ${item.trend === 'up' ? 'bg-green-500' : 'bg-red-500'}`} />
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-medium ${item.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
-                      {item.change}
-                    </p>
-                    <div className={`w-2 h-2 rounded-full mt-1 ${item.trend === 'up' ? 'bg-green-500' : 'bg-red-500'}`} />
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

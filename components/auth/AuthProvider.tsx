@@ -22,6 +22,7 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   needsOnboarding: boolean;
   completeOnboarding: (data: Partial<User>) => Promise<void>;
   login: (email: string, password: string, role: 'farmer' | 'seller' | 'admin') => Promise<{ success: boolean; error?: string }>;
@@ -52,6 +53,7 @@ export { getUserDocRef };
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   useEffect(() => {
@@ -69,12 +71,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             break;
           }
         }
-        if (userDoc) {
-          setUser({ ...userData, id: firebaseUser.uid, role: foundRole });
+        if (userDoc && userData && foundRole) {
+          setUser({ 
+            id: firebaseUser.uid,
+            email: userData.email || firebaseUser.email || '',
+            name: userData.name || firebaseUser.displayName || '',
+            role: foundRole as 'farmer' | 'seller' | 'admin'
+          });
           setNeedsOnboarding(!userData.role || typeof userData.role !== 'string' || userData.role.length === 0);
         } else {
           // If no profile, create a minimal one in 'farmers' by default
-          const newUser = {
+          const newUser: User = {
             id: firebaseUser.uid,
             email: firebaseUser.email || '',
             name: firebaseUser.displayName || '',
@@ -90,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsAuthenticated(false);
         setNeedsOnboarding(false);
       }
+      setIsLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -108,7 +116,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const ref = getUserDocRef({ id: result.user.uid, role });
       const userDoc = await getDoc(ref);
       if (userDoc.exists() && userDoc.data().role === role) {
-        setUser({ ...userDoc.data(), id: result.user.uid, role });
+        const userData = userDoc.data();
+        setUser({ 
+          id: result.user.uid, 
+          email: userData.email || '',
+          name: userData.name || '',
+          role: role 
+        });
         setIsAuthenticated(true);
         return { success: true };
       } else {
@@ -123,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signup = async (userData: { email: string; password: string; name: string; role: 'farmer' | 'seller' | 'admin' }) => {
     try {
       const result = await createUserWithEmailAndPassword(auth, userData.email, userData.password);
-      const newUser = {
+      const newUser: User = {
         id: result.user.uid,
         email: userData.email,
         name: userData.name,
@@ -154,7 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (!userDoc) {
         // Create user profile with selected role
-        const newUser = {
+        const newUser: User = {
           id: result.user.uid,
           email: result.user.email || '',
           name: result.user.displayName || '',
@@ -162,12 +176,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
         await setDoc(getUserDocRef(newUser), newUser);
         setUser(newUser);
-      } else {
+      } else if (userData && foundRole) {
         if (!userData.role || typeof userData.role !== 'string' || userData.role.length === 0) {
           await setDoc(getUserDocRef({ id: result.user.uid, role }), { ...userData, role }, { merge: true });
-          setUser({ ...userData, role });
+          setUser({ 
+            id: result.user.uid,
+            email: userData.email || '',
+            name: userData.name || '',
+            role: role 
+          });
         } else {
-          setUser({ ...userData, id: result.user.uid, role: foundRole });
+          setUser({ 
+            id: result.user.uid,
+            email: userData.email || '',
+            name: userData.name || '',
+            role: foundRole as 'farmer' | 'seller' | 'admin'
+          });
         }
       }
       setIsAuthenticated(true);
@@ -186,6 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = {
     user,
     isAuthenticated,
+    isLoading,
     needsOnboarding,
     completeOnboarding,
     login,

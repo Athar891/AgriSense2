@@ -58,6 +58,7 @@ export class VoiceService {
   private recognition: any = null;
   private synthesis: SpeechSynthesis | null = null;
   private currentUtterance: SpeechSynthesisUtterance | null = null;
+  private recognitionIsActive: boolean = false;
 
   constructor() {
     this.initializeSpeechRecognition();
@@ -96,6 +97,12 @@ export class VoiceService {
       onError('Speech recognition not supported');
       return;
     }
+    if (this.recognitionIsActive) {
+      onError('Speech recognition already active');
+      return;
+    }
+    this.recognitionIsActive = true;
+    console.log('Starting speech recognition...');
 
     this.recognition.onstart = () => {
       console.log('Speech recognition started');
@@ -115,29 +122,36 @@ export class VoiceService {
       }
 
       const fullTranscript = finalTranscript + interimTranscript;
+      console.log('Transcript:', fullTranscript);
       onTranscript(fullTranscript);
     };
 
     this.recognition.onerror = (event: any) => {
       console.error('Speech recognition error:', event.error);
+      this.recognitionIsActive = false;
       onError(event.error);
     };
 
     this.recognition.onend = () => {
       console.log('Speech recognition ended');
+      this.recognitionIsActive = false;
       onEnd();
     };
 
     try {
       this.recognition.start();
     } catch (error) {
+      this.recognitionIsActive = false;
+      console.error('Failed to start speech recognition', error);
       onError('Failed to start speech recognition');
     }
   }
 
   public stopListening(): void {
-    if (this.recognition) {
+    if (this.recognition && this.recognitionIsActive) {
       this.recognition.stop();
+      this.recognitionIsActive = false;
+      console.log('Stopped speech recognition');
     }
   }
 
